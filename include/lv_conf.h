@@ -73,6 +73,7 @@
 #define LV_USE_ROLLER 0
 #define LV_USE_TEXTAREA 1
 #define LV_USE_DROPDOWN 0
+#define LV_USE_QRCODE 1     // GitHub sign-in shows its address as a QR code
 #define LV_USE_CHECKBOX 0
 #define LV_USE_TABLE 0
 #define LV_USE_BTNMATRIX 1

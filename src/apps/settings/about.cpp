@@ -15,6 +15,7 @@ void aboutPage(lv_obj_t *appRoot) {
   ui::push(appRoot, "About", [appRoot](lv_obj_t *c) {
       const Palette &p = theme::p();
       char buf[40];
+      softwareUpdateSection(c, appRoot);
       lv_obj_t *g = ui::group(c);
       ui::row(g, nullptr, p.gray, "Name", "yOS");
       ui::row(g, nullptr, p.gray, "Version", YOS_VERSION);
@@ -39,23 +40,6 @@ void aboutPage(lv_obj_t *appRoot) {
       ui::row(g, nullptr, p.gray, "Uptime", buf);
       ui::row(g, nullptr, p.gray, "Web Dashboard", WiFi.localIP().toString().c_str());
 
-      // Wi-Fi updates need this password (tools/flash.sh asks for it once and keeps it in the Mac's Keychain).
-      g = ui::group(c, "Software Update", "Needed to install updates over Wi-Fi. USB updates don't ask for it.");
-      lv_obj_t *pwValue = ui::row(g, nullptr, p.gray, "Update Password", prefs::otaPassword().c_str(), [appRoot, c] {
-        ui::textInput(appRoot, "Update Password", "At least 8 characters", prefs::otaPassword().c_str(), false,
-                      [c](const String &text) {
-          String pw = text;
-          pw.trim();
-          if (pw.length() < 8) {
-            ui::alert("Password Too Short", "Use at least 8 characters.", {{"OK", ui::AlertAction::CANCEL, nullptr}});
-            return;
-          }
-          prefs::setOtaPassword(pw);
-          lv_obj_t *v = (lv_obj_t *)lv_obj_get_user_data(c);
-          if (v) lv_label_set_text(v, pw.c_str());
-        });
-      }).value;
-      lv_obj_set_user_data(c, pwValue);  // the page outlives the text entry, so the row can show the new value
     });
 }
 }

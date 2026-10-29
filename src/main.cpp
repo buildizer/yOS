@@ -16,8 +16,14 @@
 #include "services/web.h"
 #include "services/usb_update.h"
 #include "services/wifi_manager.h"
+#include "services/github_update.h"
+#include <esp_ota_ops.h>
 #include "services/ble.h"
 #include "script/loader.h"
+
+// A freshly installed image stays "pending" until it has run for a while (see loop()). If it crashes
+// or resets before then, the bootloader goes back to the previous version on its own.
+extern "C" bool verifyRollbackLater() { return true; }
 
 // Over-the-air updates (tools/flash.sh ota). A full-screen overlay shows progress so nobody unplugs mid-update.
 static void startOta() {
@@ -48,6 +54,7 @@ void setup() {
   bootScreenStart();
   lv_timer_handler();     // draw the first frame, then light the panel
   hal::backlightOnNow();
+  ghupdate::begin();
   wifimgr::begin();
   String first = wifimgr::firstSavedSsid();
   String shown;
@@ -100,13 +107,20 @@ void setup() {
 }
 
 void loop() {
-  usbUpdatePoll();
+  // A GitHub install owns the flash and the update screen; USB and Wi-Fi pushes wait until it's done.
+  if (!ghupdate::installing()) usbUpdatePoll();
+  static bool markedGood = false;
+  if (!markedGood && millis() > 30000) {
+    markedGood = true;
+    esp_ota_mark_app_valid_cancel_rollback();  // survived 30 s: keep this version
+  }
+  ghupdate::loop();
   static uint32_t otaPwSeen = 0;  // a new password from Settings applies here, between OTA sessions
   if (prefs::otaPasswordVersion() != otaPwSeen) {
     otaPwSeen = prefs::otaPasswordVersion();
     ArduinoOTA.setPassword(prefs::otaPassword().c_str());
   }
-  ArduinoOTA.handle();
+  if (!ghupdate::installing()) ArduinoOTA.handle();
   webLoop();
   delay(2);
 }

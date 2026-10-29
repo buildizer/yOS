@@ -2,6 +2,12 @@
 #include <IPAddress.h>
 
 #define HOSTNAME        "netwatch"
+// Software updates come from GitHub Releases of this repo (an asset named firmware.bin, tag v<version>).
+// The board signs in through the "yOS Updater" GitHub App's device flow; its client ID is public, not a secret.
+#define GITHUB_REPO          "buildizer/yOS"
+#define GITHUB_APP_CLIENT_ID ""
+#define GITHUB_FW_ASSET      "firmware.bin"
+
 #define TZ_INFO         "EET-2EEST,M4.5.5/0,M10.5.4/24"  // Africa/Cairo
 
 #define PING_INTERVAL_MS   5000
