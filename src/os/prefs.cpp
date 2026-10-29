@@ -1,5 +1,6 @@
 #include "prefs.h"
 #include <Preferences.h>
+#include <esp_system.h>
 
 static Preferences nvs;
 static Appearance appearanceVal = APPEARANCE_AUTO;
@@ -7,6 +8,8 @@ static uint8_t brightnessVal = 255;
 static uint8_t dimAfterVal = 5;
 static bool reduceMotionVal = false, use24hVal = true, rotationWidgetVal = true;
 static uint8_t rotationVal = 0;
+static String otaPasswordVal;
+static volatile uint32_t otaPasswordVer = 0;
 
 namespace prefs {
 void load() {
@@ -18,7 +21,20 @@ void load() {
   use24hVal = nvs.getBool("use24h", true);
   rotationVal = nvs.getUChar("rotation", 0) & 3;
   rotationWidgetVal = nvs.getBool("rotwidget", true);
+  otaPasswordVal = nvs.getString("otapw", "");
+  if (otaPasswordVal.isEmpty()) {  // first boot: no shared default, every device gets its own
+    static const char chars[] = "abcdefghjkmnpqrstuvwxyz23456789";  // no 0/o, 1/l/i look-alikes
+    for (int i = 0; i < 10; i++) otaPasswordVal += chars[esp_random() % (sizeof(chars) - 1)];
+    nvs.putString("otapw", otaPasswordVal);
+  }
 }
+String otaPassword() { return otaPasswordVal; }
+void setOtaPassword(const String &pw) {
+  otaPasswordVal = pw;
+  nvs.putString("otapw", pw);
+  otaPasswordVer++;
+}
+uint32_t otaPasswordVersion() { return otaPasswordVer; }
 Appearance appearance() { return appearanceVal; }
 void setAppearance(Appearance a) { appearanceVal = a; nvs.putUChar("appearance", a); }
 uint8_t brightness() { return 255; }  // brightness control is disabled for now: always full (saved value kept)

@@ -3,8 +3,9 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <ESP32Ping.h>
+#include <Preferences.h>
+#include <mutex>
 #include "services/dns_probe.h"
-#include "secrets.h"
 #include "services/storage.h"
 
 static Snapshot state;
@@ -58,15 +59,58 @@ static void recordHistory(int probe, bool ok, float rttMs) {
   history[probe][histHead] = ok ? uint16_t(min(rttMs * 10.0f, 65534.0f)) : HIST_FAIL;
 }
 
+// AdGuard Home login, entered in Settings › Apps › Netwatch and kept in NVS (never in the source).
+static std::mutex cfgMutex;
+static AdguardConfig adgCfg;
+static volatile bool adguardDirty = false;
+
+static void loadAdguardConfig() {
+  Preferences p;
+  p.begin("adguard", false);
+  std::lock_guard<std::mutex> g(cfgMutex);
+  adgCfg.host = p.getString("host", ADGUARD_IP.toString());
+  adgCfg.user = p.getString("user", "admin");
+  adgCfg.pass = p.getString("pass", "");
+  p.end();
+}
+
+AdguardConfig monitorAdguardConfig() {
+  std::lock_guard<std::mutex> g(cfgMutex);
+  return adgCfg;
+}
+
+void monitorSetAdguardConfig(const AdguardConfig &c) {
+  {
+    std::lock_guard<std::mutex> g(cfgMutex);
+    adgCfg = c;
+  }
+  Preferences p;
+  p.begin("adguard", false);
+  p.putString("host", c.host);
+  p.putString("user", c.user);
+  p.putString("pass", c.pass);
+  p.end();
+  adguardDirty = true;  // poll with the new login on the next cycle
+  if (task) xTaskNotifyGive(task);
+}
+
 static void beginAdguard(HTTPClient &http, const char *path) {
+  AdguardConfig c = monitorAdguardConfig();
   http.setTimeout(4000);
   http.useHTTP10(true);  // avoid chunked encoding so the JSON stream parses directly
-  http.begin(String("http://") + ADGUARD_IP.toString() + path);
-  http.setAuthorization(ADGUARD_USER, ADGUARD_PASS);
+  http.begin("http://" + c.host + path);
+  http.setAuthorization(c.user.c_str(), c.pass.c_str());
 }
 
 static void pollAdguard() {
-  if (strlen(ADGUARD_PASS) == 0) return;
+  AdguardConfig c = monitorAdguardConfig();
+  if (c.host.isEmpty() || c.pass.isEmpty()) {  // not set up: show nothing rather than an error
+    xSemaphoreTake(lock, portMAX_DELAY);
+    state.adguard = AdguardState();
+    state.version++;
+    xSemaphoreGive(lock);
+    return;
+  }
   AdguardState a;
   a.known = true;
 
@@ -206,8 +250,9 @@ static void monitorTask(void *) {
       flushEventsToStorage();
       logMinute();
 
-      if (firstAdguard || millis() - lastAdguard >= ADGUARD_INTERVAL_MS) {
+      if (firstAdguard || adguardDirty || millis() - lastAdguard >= ADGUARD_INTERVAL_MS) {
         firstAdguard = false;
+        adguardDirty = false;
         lastAdguard = millis();
         pollAdguard();
       }
@@ -233,6 +278,7 @@ bool monitorEnabled() { return enabled; }
 void monitorStart() {
   if (lock) return;  // already running
   lock = xSemaphoreCreateMutex();
+  loadAdguardConfig();
   eventQueue = xQueueCreate(16, sizeof(Event));
   xTaskCreatePinnedToCore(monitorTask, "monitor", 12288, nullptr, 1, &task, 0);
 }

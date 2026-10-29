@@ -20,6 +20,10 @@ bool use24h();
 void setUse24h(bool on);
 bool reduceMotion();
 void setReduceMotion(bool on);
+// Password for Wi-Fi updates. Made up on first boot; shown and changed in Settings › General › About.
+String otaPassword();
+void setOtaPassword(const String &pw);
+uint32_t otaPasswordVersion();   // bumps on every change, so the OTA service can pick it up
 bool autostart(const char *appId, bool fallback);
 void setAutostart(const char *appId, bool on);
 }

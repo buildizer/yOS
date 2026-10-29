@@ -7,12 +7,23 @@
 #                           when the installed firmware is broken
 #   tools/flash.sh auto     Wi-Fi when the board answers, else USB, without asking
 # YOS_HOST overrides the board's Wi-Fi address (default 192.168.88.164).
+# Wi-Fi updates need the board's Update Password (Settings > General > About). It is asked for once
+# and kept in the macOS Keychain; YOS_OTA_PASS overrides it.
 set -e
 setopt null_glob  # an unmatched port pattern is empty, not an error
 cd "$(dirname $0)/.."
 MODE=${1:-ask}
 HOST=${YOS_HOST:-192.168.88.164}
-PASS=$(sed -n 's/^#define OTA_PASS "\(.*\)"/\1/p' include/secrets.h)
+KEYCHAIN_SERVICE=yos-ota
+
+ota_password() {
+  [[ -n $YOS_OTA_PASS ]] && { echo $YOS_OTA_PASS; return; }
+  security find-generic-password -s $KEYCHAIN_SERVICE -a yos -w 2>/dev/null && return
+  read -s "pw?Update Password (on the board: Settings > General > About): " </dev/tty; echo >&2
+  [[ -n $pw ]] || return 1
+  security add-generic-password -U -s $KEYCHAIN_SERVICE -a yos -w "$pw" && echo "Saved in the Keychain." >&2
+  echo $pw
+}
 
 reachable() { curl -s -m 3 -o /dev/null "http://$HOST/" ; }
 usb_port() { ls /dev/cu.usbserial-* /dev/cu.wchusbserial* 2>/dev/null | head -1; }  # changes with the USB socket used
@@ -43,12 +54,13 @@ fi
 START=$(date +%s)
 case $MODE in
   ota)
-    [[ -n $PASS ]] || { echo "OTA_PASS missing from include/secrets.h" >&2; exit 1; }
+    PASS=$(ota_password) || { echo "No Update Password given." >&2; exit 1; }
     reachable || { echo "The board doesn't answer at $HOST. Is this Mac on the same Wi-Fi, and is Wi-Fi on in the board's Settings?" >&2; exit 1; }
     pio run -e yos  # one build for every route; espota sends that same file
     PY=$(ls ~/.platformio/penv/bin/python /opt/homebrew/opt/platformio/libexec/bin/python 2>/dev/null | head -1)
     "$PY" ~/.platformio/packages/framework-arduinoespressif32/tools/espota.py -i "$HOST" -p 3232 \
-      -a "$PASS" -f .pio/build/yos/firmware.bin ;;
+      -a "$PASS" -f .pio/build/yos/firmware.bin || {
+      echo "If the password was refused, run: security delete-generic-password -s $KEYCHAIN_SERVICE" >&2; exit 1; } ;;
   usb)
     PORT=$(usb_port)
     [[ -n $PORT ]] || { echo "No USB serial port found. Check the cable." >&2; exit 1; }

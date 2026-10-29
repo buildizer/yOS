@@ -33,7 +33,38 @@ static Probe probe(const Snapshot &s, int i) {
   return {"DNS", s.dns.known, s.dns.up, s.dns.rttMs, s.dns.since};
 }
 
+static const char *ADG_FIELDS[] = {"Server", "Username", "Password"};
+
 class NetwatchApp : public App {
+  lv_obj_t *adgValues[3] = {};  // value labels on the settings page while it is open
+
+  static String *adgField(AdguardConfig &c, int i) { return i == 0 ? &c.host : i == 1 ? &c.user : &c.pass; }
+  static const char *adgSummary(AdguardConfig &c, int i) {
+    String *f = adgField(c, i);
+    if (f->isEmpty()) return "Not set";
+    return i == 2 ? "Saved" : f->c_str();
+  }
+
+  void editAdguard(lv_obj_t *appRoot, int i) {
+    static const char *hints[] = {"192.168.88.90", "admin", "Password"};
+    AdguardConfig c = monitorAdguardConfig();
+    bool secret = i == 2;
+    // The password is never shown again; entering it starts from empty.
+    ui::textInput(appRoot, ADG_FIELDS[i], hints[i], secret ? "" : adgField(c, i)->c_str(), secret,
+                  [this, i, secret](const String &text) {
+      AdguardConfig c = monitorAdguardConfig();
+      String v = text;
+      if (!secret) v.trim();
+      if (i == 0) {  // accept a pasted URL: keep host[:port] only
+        if (v.startsWith("http://")) v.remove(0, 7);
+        if (v.endsWith("/")) v.remove(v.length() - 1);
+      }
+      *adgField(c, i) = v;
+      monitorSetAdguardConfig(c);
+      if (adgValues[i]) lv_label_set_text(adgValues[i], adgSummary(c, i));
+    });
+  }
+
 public:
   const char *id() const override { return "netwatch"; }
   const char *name() const override { return "Netwatch"; }
@@ -52,6 +83,21 @@ public:
   void stopService() override { monitorSetEnabled(false); }
 
   uint64_t storageBytes() override { return storageInfo().logBytes; }
+
+  // Settings › Apps › Netwatch: the AdGuard Home login, kept on the device (NVS), never in the source.
+  void buildSettings(lv_obj_t *content, lv_obj_t *appRoot) override {
+    AdguardConfig c = monitorAdguardConfig();
+    lv_obj_t *g = ui::group(content, "AdGuard Home",
+                            "Stats and the Pause button use this login. Leave the password empty to turn them off.");
+    for (int i = 0; i < 3; i++) {
+      adgValues[i] = ui::row(g, nullptr, lv_color_black(), ADG_FIELDS[i], adgSummary(c, i),
+                             [this, appRoot, i] { editAdguard(appRoot, i); }).value;
+    }
+    lv_obj_add_event_cb(content, [](lv_event_t *e) {
+      auto *self = (NetwatchApp *)lv_event_get_user_data(e);
+      for (lv_obj_t *&v : self->adgValues) v = nullptr;
+    }, LV_EVENT_DELETE, this);
+  }
 
   bool liveIcon(lv_obj_t *tile) override {
     lv_obj_set_style_bg_color(tile, tint(), 0);  // the icon turns red during an outage

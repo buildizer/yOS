@@ -66,5 +66,11 @@ void monitorSnapshot(Snapshot &out);
 uint32_t monitorVersion();
 // Copies the probe's latency history, oldest first. Failed probes are NAN. Returns the sample count.
 int monitorHistory(int probe, float *out, int max);
+// AdGuard Home address and login (Settings › Apps › Netwatch). An empty password turns stats off.
+struct AdguardConfig {
+  String host, user, pass;
+};
+AdguardConfig monitorAdguardConfig();
+void monitorSetAdguardConfig(const AdguardConfig &c);
 // Asks the monitor task to pause (enable=false, for durationMs) or resume AdGuard protection.
 void monitorSetProtection(bool enable, uint32_t durationMs);

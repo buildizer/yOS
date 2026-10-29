@@ -5,7 +5,6 @@
 #include <Preferences.h>
 #include <algorithm>
 #include "config.h"
-#include "secrets.h"
 
 namespace wifimgr {
 namespace {
@@ -368,7 +367,6 @@ void begin() {
   mtx = xSemaphoreCreateMutex();
   Preferences p;
   p.begin("wifimgr", false);
-  bool seeded = p.isKey("n");
   wifiOn = p.getBool("on", true);
   int n = p.getUChar("n", 0);
   for (int i = 0; i < n && i < MAX_SAVED; i++) {
@@ -376,10 +374,6 @@ void begin() {
     if (s.ssid.length()) savedList.push_back(s);
   }
   p.end();
-  if (!seeded) {
-    savedList.push_back({WIFI_SSID, WIFI_PASS});
-    persistNow();
-  }
   autoWanted = true;
   offWanted = true;  // first tick configures the radio (on or off) and kicks off the boot connect
   xTaskCreatePinnedToCore(task, "wifi", 4608, nullptr, 1, nullptr, 0);

@@ -1,5 +1,4 @@
 .pio/
-include/secrets.h
 .venv/
 .omc/
 screenshots/

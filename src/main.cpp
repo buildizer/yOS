@@ -4,7 +4,6 @@
 #include <WiFi.h>
 #include <ArduinoOTA.h>
 #include "config.h"
-#include "secrets.h"
 #include "apps/apps.h"
 #include "os/hal.h"
 #include "os/boot_screen.h"
@@ -23,7 +22,7 @@
 // Over-the-air updates (tools/flash.sh ota). A full-screen overlay shows progress so nobody unplugs mid-update.
 static void startOta() {
   ArduinoOTA.setHostname(HOSTNAME);
-  ArduinoOTA.setPassword(OTA_PASS);
+  ArduinoOTA.setPassword(prefs::otaPassword().c_str());
   ArduinoOTA.setMdnsEnabled(false);  // the Wi-Fi manager owns mDNS
   ArduinoOTA.onStart([] { otaScreenBegin("Installing over Wi-Fi"); });
   ArduinoOTA.onProgress(otaScreenProgress);
@@ -52,9 +51,10 @@ void setup() {
   wifimgr::begin();
   String first = wifimgr::firstSavedSsid();
   String shown;
-  bootScreenStage(1, first.length() ? ("Connecting to " + first + "\xE2\x80\xA6").c_str() : "Looking for Wi-Fi\xE2\x80\xA6");
+  bootScreenStage(1, first.length() ? ("Connecting to " + first + "\xE2\x80\xA6").c_str()
+                                    : "No Wi-Fi yet. Join a network in Settings.");
   uint32_t t0 = millis();
-  while (wifimgr::state() != wifimgr::CONNECTED && wifimgr::state() != wifimgr::OFF && millis() - t0 < 20000) {
+  while (first.length() && wifimgr::state() != wifimgr::CONNECTED && wifimgr::state() != wifimgr::OFF && millis() - t0 < 20000) {
     String now = wifimgr::connectingSsid();
     if (now.length() && now != shown) {
       shown = now;
@@ -101,6 +101,11 @@ void setup() {
 
 void loop() {
   usbUpdatePoll();
+  static uint32_t otaPwSeen = 0;  // a new password from Settings applies here, between OTA sessions
+  if (prefs::otaPasswordVersion() != otaPwSeen) {
+    otaPwSeen = prefs::otaPasswordVersion();
+    ArduinoOTA.setPassword(prefs::otaPassword().c_str());
+  }
   ArduinoOTA.handle();
   webLoop();
   delay(2);

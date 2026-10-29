@@ -14,7 +14,7 @@ struct Network {
   bool saved;
 };
 
-void begin();                          // load saved networks (seeded from secrets.h on first boot), start the task
+void begin();                          // load saved networks (joined in Settings › Wi-Fi), start the task
 State state();
 bool enabled();
 void setEnabled(bool on);              // persisted; off = radio off

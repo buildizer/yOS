@@ -51,7 +51,7 @@ async function tick(){
       <div class="rtt">${t.up?t.rtt.toFixed(0)+' ms':'—'}</div></div>`);
     document.getElementById('targets').innerHTML=rows.join('');
     const a=d.adguard;
-    document.getElementById('adg').innerHTML=!a.known?'<span>AdGuard stats off (set ADGUARD_PASS)</span>':!a.ok?'<span class="d">AdGuard API unreachable</span>':
+    document.getElementById('adg').innerHTML=!a.known?'<span>AdGuard stats off (log in from Settings › Apps › Netwatch)</span>':!a.ok?'<span class="d">AdGuard API unreachable</span>':
       `<div><b>${a.queries.toLocaleString()}</b><span>queries</span></div><div><b>${a.queries?(100*a.blocked/a.queries).toFixed(1):0}%</b><span>blocked</span></div><div><b>${a.avg_ms.toFixed(1)} ms</b><span>avg processing</span></div>`;
     document.getElementById('events').innerHTML=d.events.length?d.events.map(e=>`<tr><td>${fmtTime(e.at)}</td><td>${e.what}</td>
       <td class="${e.up?'u':'d'}">${e.up?'UP (down '+fmtDur(e.down_s)+')':'DOWN'}</td></tr>`).join(''):'<tr><td>No outages recorded since boot</td></tr>';
