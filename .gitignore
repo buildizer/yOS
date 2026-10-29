@@ -1,0 +1,10 @@
+.pio/
+include/secrets.h
+.venv/
+.omc/
+screenshots/
+*.bmp
+wallpapers/*.rgb565
+wallpapers/*.thumb
+.DS_Store
+__pycache__/

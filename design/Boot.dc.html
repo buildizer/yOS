@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>yOS boot screen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0A84FF}a:hover{color:#4BA3FF}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #FFFFFF; background: #000000; display: flex; flex-direction: column; align-items: center;">
+<div style="margin-top: 128px; width: 96px; height: 96px; border-radius: 24px; background: #1C1C1E; border: 1px solid #2C2C2E; display: flex; align-items: center; justify-content: center;">
+<span style="font-size: 44px; font-weight: 700; letter-spacing: -2px;">y<span style="color: #0A84FF;">OS</span></span>
+</div>
+<div style="margin-top: 18px; font-size: 15px; color: #98989F;">Version 1.1</div>
+
+<div role="progressbar" aria-label="Starting yOS" aria-valuemin="0" aria-valuemax="4" aria-valuenow="{{ step }}" style="margin-top: 48px; width: 200px; height: 4px; border-radius: 2px; background: #2C2C2E; position: relative; overflow: hidden;">
+<span style="position: absolute; left: 0; top: 0; bottom: 0; width: {{ barWidth }}; border-radius: 2px; background: #FFFFFF;"></span>
+</div>
+<div style="margin-top: 14px; font-size: 15px; color: #98989F; min-height: 20px;">{{ stage }}</div>
+
+<button type="button" onClick="{{ next }}" style="position: absolute; bottom: 20px; right: 20px; min-height: 44px; padding: 0 14px; border: 0; border-radius: 10px; background: #1C1C1E; color: #0A84FF; font: 600 15px Inter, system-ui, sans-serif; cursor: pointer;">Next stage</button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: 1 };
+  }
+  renderVals() {
+    var stages = ['Starting…', 'Connecting to Flyaix_IoT…', 'Mounting the SD card…', 'Starting apps…', 'Ready'];
+    var s = this.state.step;
+    return {
+      step: s,
+      stage: stages[s],
+      barWidth: (s / 4 * 100) + '%',
+      next: () => this.setState({ step: (this.state.step + 1) % 5 })
+    };
+  }
+}
+</script>
+</body>
+</html>

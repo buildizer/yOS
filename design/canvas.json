@@ -1,0 +1,24 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-29T18:45:00Z" },
+  "title": "yOS Home Screen",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 480, "h": 480, "title": "A · Glance (dark, Aurora)", "radius": 16, "is_interactive": true },
+    "AllApps.dc.html": { "x": 560, "y": 0, "w": 480, "h": 480, "title": "A2 · All Apps (from A's dock)", "radius": 16, "is_interactive": true },
+    "Settings.dc.html": { "x": 0, "y": 600, "w": 480, "h": 480, "title": "S1 · Settings", "radius": 16, "is_interactive": true },
+    "SettingsDisplay.dc.html": { "x": 560, "y": 600, "w": 480, "h": 480, "title": "S2 · Display & Brightness", "radius": 16, "is_interactive": true },
+    "SettingsWifi.dc.html": { "x": 1120, "y": 600, "w": 480, "h": 480, "title": "S3 · Wi-Fi", "radius": 16, "is_interactive": true },
+    "AppClock.dc.html": { "x": 0, "y": 1200, "w": 480, "h": 480, "title": "Clock", "radius": 16, "is_interactive": true },
+    "AppWeather.dc.html": { "x": 560, "y": 1200, "w": 480, "h": 480, "title": "Weather", "radius": 16, "is_interactive": true },
+    "AppFiles.dc.html": { "x": 1120, "y": 1200, "w": 480, "h": 480, "title": "Files", "radius": 16, "is_interactive": true },
+    "Boot.dc.html": { "x": 0, "y": 1800, "w": 480, "h": 480, "title": "Boot", "radius": 16, "is_interactive": true },
+    "OtaUpdate.dc.html": { "x": 560, "y": 1800, "w": 480, "h": 480, "title": "Software Update (OTA)", "radius": 16, "is_interactive": true }
+  },
+  "order": ["Main.dc.html", "AllApps.dc.html", "Settings.dc.html", "SettingsDisplay.dc.html", "SettingsWifi.dc.html", "AppClock.dc.html", "AppWeather.dc.html", "AppFiles.dc.html", "Boot.dc.html", "OtaUpdate.dc.html"],
+  "notes": {
+    "title": { "x": 0, "y": -260, "text": "yOS home screen and All Apps for the 480 × 480 panel", "kind": "title1", "maxW": 1040 }
+  },
+  "designSystems": []
+}

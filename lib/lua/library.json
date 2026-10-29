@@ -1,0 +1,13 @@
+{
+  "name": "lua",
+  "version": "5.4.7",
+  "description": "Lua 5.4.7 (official lua.org sources, library only), compiled as C++ so Lua errors unwind C++ frames",
+  "license": "MIT",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src",
+    "srcFilter": ["-<*>", "+<lua_unity.cpp>"]
+  }
+}

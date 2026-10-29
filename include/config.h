@@ -1,0 +1,26 @@
+#pragma once
+#include <IPAddress.h>
+
+#define HOSTNAME        "netwatch"
+#define TZ_INFO         "EET-2EEST,M4.5.5/0,M10.5.4/24"  // Africa/Cairo
+
+#define PING_INTERVAL_MS   5000
+#define ADGUARD_INTERVAL_MS 60000
+#define FAILS_BEFORE_DOWN  2        // consecutive failures before a target counts as down
+
+#define ADGUARD_IP      IPAddress(192, 168, 88, 90)
+#define DNS_TEST_NAMES  { "google.com", "cloudflare.com", "apple.com", "wikipedia.org" }
+
+struct TargetDef {
+  const char *name;
+  IPAddress ip;
+};
+
+static const TargetDef TARGETS[] = {
+  {"Router",     IPAddress(192, 168, 88, 1)},
+  {"WAN 1 Gateway", IPAddress(192, 168, 1, 1)},
+  {"WAN 2 Gateway", IPAddress(192, 168, 2, 1)},
+  {"AdGuard Pi", IPAddress(192, 168, 88, 90)},
+  {"Deco",       IPAddress(192, 168, 88, 107)},
+};
+static const int NUM_TARGETS = sizeof(TARGETS) / sizeof(TARGETS[0]);

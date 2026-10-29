@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>yOS Settings: Wi-Fi</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0A84FF}a:hover{color:#4BA3FF}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #FFFFFF; background: #000000;">
+<div style="position: absolute; top: 0; left: 0; right: 0; height: 32px; padding: 0 18px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; background: #000000; z-index: 2;">
+<span>18:42</span>
+<span style="display: flex; gap: 10px; align-items: center;">
+<svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.86a10 10 0 0 1 14 0"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/></svg>
+<svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+</span>
+</div>
+
+<div style="position: absolute; top: 32px; left: 0; right: 0; bottom: 0; overflow-y: auto; padding: 0 16px 36px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;">
+<a href="Settings.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 2px; font-size: 17px; text-decoration: none; align-self: flex-start;">
+<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Settings</a>
+<h1 style="margin: 0 0 4px; font-size: 30px; font-weight: 700;">Wi-Fi</h1>
+
+<div style="background: #1C1C1E; border-radius: 12px;">
+<div style="min-height: 50px; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 14px;">
+<span style="width: 30px; height: 30px; border-radius: 7px; background: #0A84FF; display: flex; align-items: center; justify-content: center;">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.86a10 10 0 0 1 14 0"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/></svg>
+</span>
+<span style="flex: 1; font-size: 17px;">Wi-Fi</span>
+<button type="button" role="switch" aria-checked="{{ onAttr }}" aria-label="Wi-Fi" onClick="{{ toggle }}" style="width: 51px; height: 31px; border: 0; border-radius: 16px; background: {{ switchBg }}; position: relative; cursor: pointer; padding: 0;">
+<span style="position: absolute; top: 2px; left: {{ knob }}; width: 27px; height: 27px; border-radius: 50%; background: #FFFFFF;"></span>
+</button>
+</div>
+</div>
+
+<sc-if value="{{ on }}" hint-placeholder-val="{{ true }}">
+<div style="background: #1C1C1E; border-radius: 12px;">
+<a href="#" style="min-height: 50px; display: flex; align-items: center; gap: 10px; padding: 0 14px; text-decoration: none; color: #FFFFFF;">
+<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+<span style="flex: 1; font-size: 17px;">Flyaix_IoT</span>
+<span style="display: flex; align-items: center; gap: 8px; color: #98989F; font-size: 15px;">
+<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+Strong
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5A5A5F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+</span>
+</a>
+</div>
+
+<div style="font-size: 15px; color: #98989F; padding: 4px 16px 0;">Networks</div>
+<div style="background: #1C1C1E; border-radius: 12px; overflow: hidden;">
+<sc-for list="{{ networks }}" as="n" hint-placeholder-count="3">
+<a href="#" style="min-height: 50px; display: flex; align-items: center; margin-left: 16px; padding-right: 14px; border-top: {{ n.sep }}; text-decoration: none; color: #FFFFFF;">
+<span style="flex: 1; font-size: 17px;">{{ n.ssid }}</span>
+<span style="display: flex; align-items: center; gap: 8px; color: #98989F; font-size: 15px;">
+<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+{{ n.signal }}
+</span>
+</a>
+</sc-for>
+<a href="#" style="min-height: 50px; display: flex; align-items: center; margin-left: 16px; border-top: 1px solid #38383A; text-decoration: none; font-size: 17px;">Other Network…</a>
+</div>
+<div style="font-size: 13px; color: #98989F; padding: 0 16px;">Tap a network to join it. Secured networks ask for the password.</div>
+</sc-if>
+</div>
+<div style="position: absolute; bottom: 8px; left: 170px; width: 140px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.6);"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { on: true };
+  }
+  renderVals() {
+    var on = this.state.on;
+    return {
+      on: on,
+      onAttr: on ? 'true' : 'false',
+      switchBg: on ? '#30D158' : '#39393D',
+      knob: on ? '22px' : '2px',
+      toggle: () => this.setState({ on: !this.state.on }),
+      networks: [
+        { ssid: 'WE_Elsayaad', signal: 'Fair', sep: '0' },
+        { ssid: 'Orange-HSW', signal: 'Weak', sep: '1px solid #38383A' },
+        { ssid: 'Lola_EXT', signal: 'Weak', sep: '1px solid #38383A' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
