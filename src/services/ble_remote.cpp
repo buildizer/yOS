@@ -580,11 +580,11 @@ void worker(void *) {
 
 // The stack already refuses these writes on a link that isn't encrypted and passkey-authenticated
 // (SECURE_WRITE); checking again costs nothing.
-bool trusted(const ble_gap_conn_desc *d) { return d && d->sec_state.encrypted && d->sec_state.authenticated; }
+bool trusted(const NimBLEConnInfo &i) { return i.isEncrypted() && i.isAuthenticated(); }
 
 class CmdCb : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *c, ble_gap_conn_desc *d) override {
-    if (!trusted(d)) return;
+  void onWrite(NimBLECharacteristic *c, NimBLEConnInfo &info) override {
+    if (!trusted(info)) return;
     NimBLEAttValue v = c->getValue();
     if (!v.size() || v.size() > CMD_MAX) return;
     char *text = (char *)heap_caps_malloc(v.size() + 1, MALLOC_CAP_SPIRAM);
@@ -592,7 +592,7 @@ class CmdCb : public NimBLECharacteristicCallbacks {
     memcpy(text, v.data(), v.size());
     text[v.size()] = 0;
     RLock l;
-    conn = d->conn_handle;
+    conn = info.getConnHandle();
     if (!workerAlive) {
       // 6 KB of internal RAM while it runs: file systems and SD are no place for a PSRAM stack.
       workerAlive = xTaskCreatePinnedToCore(worker, "bleremote", 6144, nullptr, 1, nullptr, 0) == pdPASS;
@@ -603,8 +603,8 @@ class CmdCb : public NimBLECharacteristicCallbacks {
 CmdCb cmdCb;
 
 class DataCb : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *c, ble_gap_conn_desc *d) override {
-    if (!trusted(d)) return;
+  void onWrite(NimBLECharacteristic *c, NimBLEConnInfo &info) override {
+    if (!trusted(info)) return;
     NimBLEAttValue v = c->getValue();
     uint32_t n = v.size();
     RLock l;

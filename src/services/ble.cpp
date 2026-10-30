@@ -67,8 +67,8 @@ void setError(const char *msg) {
 
 // ---------- NimBLE callbacks ----------
 
-class ScanCb : public NimBLEAdvertisedDeviceCallbacks {
-  void onResult(NimBLEAdvertisedDevice *d) override {
+class ScanCb : public NimBLEScanCallbacks {
+  void onResult(const NimBLEAdvertisedDevice *d) override {
     std::string a = d->getAddress().toString();
     Lock l;
     int i = 0;
@@ -90,7 +90,7 @@ class ScanCb : public NimBLEAdvertisedDeviceCallbacks {
 ScanCb scanCb;
 
 class ClientCb : public NimBLEClientCallbacks {
-  void onDisconnect(NimBLEClient *) override {
+  void onDisconnect(NimBLEClient *, int) override {
     Lock l;
     if (st.link == LINK_CONNECTED) st.link = LINK_IDLE;
     st.paired = false;
@@ -116,18 +116,18 @@ int onPeerName(uint16_t conn, const ble_gatt_error *err, ble_gatt_attr *attr, vo
 
 // Runs on the NimBLE host task: everything the UI needs goes into st and bumps the version.
 class ServerCb : public NimBLEServerCallbacks {
-  void onConnect(NimBLEServer *s, ble_gap_conn_desc *desc) override {
+  void onConnect(NimBLEServer *s, NimBLEConnInfo &info) override {
     {
       Lock l;
       st.peerConnected = true;
       st.peerName[0] = 0;
-      peerConn = desc->conn_handle;
+      peerConn = info.getConnHandle();
       touch();
     }
     ble_uuid16_t name = BLE_UUID16_INIT(0x2A00);
-    ble_gattc_read_by_uuid(desc->conn_handle, 1, 0xFFFF, &name.u, onPeerName, nullptr);
+    ble_gattc_read_by_uuid(info.getConnHandle(), 1, 0xFFFF, &name.u, onPeerName, nullptr);
   }
-  void onDisconnect(NimBLEServer *s, ble_gap_conn_desc *desc) override {
+  void onDisconnect(NimBLEServer *s, NimBLEConnInfo &, int) override {
     bool disc;
     {
       Lock l;
@@ -141,7 +141,7 @@ class ServerCb : public NimBLEServerCallbacks {
     if (disc) NimBLEDevice::getAdvertising()->start();
   }
   // We are DisplayOnly: the stack asks for the key the phone's user must type.
-  uint32_t onPassKeyRequest() override {
+  uint32_t onPassKeyDisplay() override {
     uint32_t key = esp_random() % 1000000;
     Lock l;
     st.pairing = PAIR_PASSKEY;
@@ -150,8 +150,8 @@ class ServerCb : public NimBLEServerCallbacks {
     return key;
   }
   // Also called when a bonded phone just re-encrypts: only a pairing we showed a code for reports.
-  void onAuthenticationComplete(ble_gap_conn_desc *desc) override {
-    bool ok = desc->sec_state.encrypted && desc->sec_state.authenticated;
+  void onAuthenticationComplete(NimBLEConnInfo &info) override {
+    bool ok = info.isEncrypted() && info.isAuthenticated();
     Msg m = {};
     {
       Lock l;
@@ -162,8 +162,9 @@ class ServerCb : public NimBLEServerCallbacks {
       m.cmd = C_PHONE_PAIRED;
       snprintf(m.name, sizeof(m.name), "%s", st.peerName);
     }
-    m.type = desc->peer_id_addr.type;
-    snprintf(m.addr, sizeof(m.addr), "%s", NimBLEAddress(desc->peer_id_addr).toString().c_str());
+    NimBLEAddress id = info.getIdAddress();
+    m.type = id.getType();
+    snprintf(m.addr, sizeof(m.addr), "%s", id.toString().c_str());
     xQueueSend(queue, &m, 0);  // the ble task stores the name and refreshes the list
   }
 };
@@ -269,7 +270,7 @@ bool stackStart() {
     g.putBool("starting", false);
     g.end();
   }
-  if (!NimBLEDevice::getInitialized()) {
+  if (!NimBLEDevice::isInitialized()) {
     setError("Bluetooth couldn't start. Not enough memory.");
     return false;
   }
@@ -293,7 +294,8 @@ bool stackStart() {
   NimBLEDevice::setMTU(PREFERRED_MTU);
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
   adv->addServiceUUID(SVC_UUID);
-  adv->setScanResponse(true);
+  adv->setName("yOS");
+  adv->enableScanResponse(true);
   stackUp = true;
   c.freeAfter = freeHeap();
   c.internalAfter = freeInternal();
@@ -364,11 +366,11 @@ void doScan() {
     touch();
   }
   NimBLEScan *s = NimBLEDevice::getScan();
-  s->setAdvertisedDeviceCallbacks(&scanCb, false);
+  s->setScanCallbacks(&scanCb, false);
   s->setActiveScan(true);
   s->setInterval(100);
   s->setWindow(99);
-  s->start(SCAN_SECONDS, false);  // blocks this task only
+  s->getResults(SCAN_SECONDS * 1000, false);  // blocks this task only
   s->clearResults();
   Lock l;
   st.scanning = false;
@@ -388,7 +390,7 @@ bool doConnect(const char *addr, uint8_t type, const char *name, bool user) {
   dropClient();
   client = NimBLEDevice::createClient();
   client->setClientCallbacks(&clientCb, false);
-  client->setConnectTimeout(user ? 10 : 5);
+  client->setConnectTimeout(user ? 10000 : 5000);  // ms
   bool ok = client->connect(NimBLEAddress(std::string(addr), type), false);
   bool paired = false;
   if (ok) {
