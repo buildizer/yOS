@@ -220,7 +220,8 @@ static bool formatCard() {
   if (work) {
     char drv[3] = {char('0' + pdrv), ':', 0};
     uint32_t t0 = millis();
-    res = f_mkfs(drv, FM_ANY, 0, work, workLen);
+    const MKFS_PARM opt = {FM_ANY, 0, 0, 0, 0};  // FatFs picks FAT type and cluster size
+    res = f_mkfs(drv, &opt, work, workLen);
     free(work);
     Serial.printf("format: f_mkfs -> %d after %lu ms\n", res, millis() - t0);
   }

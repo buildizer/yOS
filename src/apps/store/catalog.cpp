@@ -13,6 +13,7 @@
 
 // TLS root certificates, embedded by board_build.embed_files (tools/gen_cert_bundle.py).
 extern const uint8_t certBundle[] asm("_binary_data_x509_crt_bundle_bin_start");
+extern const uint8_t certBundleEnd[] asm("_binary_data_x509_crt_bundle_bin_end");
 
 namespace appstore {
 namespace {
@@ -61,7 +62,7 @@ bool urlSafe(const String &s) {
 int fetch(const String &token, const String &path, std::string &out, size_t maxBytes,
           std::function<void(size_t)> onBytes = nullptr) {
   WiFiClientSecure client;
-  client.setCACertBundle(certBundle);
+  client.setCACertBundle(certBundle, certBundleEnd - certBundle);
   client.setTimeout(15);
   HTTPClient http;
   http.useHTTP10(true);  // no chunked encoding: the body is a plain byte stream
@@ -149,7 +150,7 @@ void jobRefresh() {
     l.summary = a["summary"] | "";
     l.description = a["description"] | "";
     l.notes = a["notes"] | "";
-    l.requires = a["requires"] | "";
+    l.minYos = a["requires"] | "";
     l.needs = a["needs"] | "";
     l.developer = a["developer"] | "buildizer";
     l.size = a["size"] | 0;

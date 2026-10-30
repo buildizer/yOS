@@ -1,11 +1,11 @@
 #include "services/web.h"
+#include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include "services/monitor.h"
 #include "services/storage.h"
 #include <SD.h>
 #include "os/hal.h"
-#include <esp32s3/rom/cache.h>
 #include "os/os.h"
 #include "os/prefs.h"
 #include "os/wallpaper.h"

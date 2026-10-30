@@ -34,7 +34,7 @@ String formatSize(uint64_t bytes) {
 }
 
 bool tooOld(const appstore::Listing &l) {
-  return l.requires.length() && ghupdate::compareVersions(YOS_FIRMWARE_VERSION, l.requires.c_str()) < 0;
+  return l.minYos.length() && ghupdate::compareVersions(YOS_FIRMWARE_VERSION, l.minYos.c_str()) < 0;
 }
 
 // Opening an app deletes this one's screen, which holds the button being tapped: do it after the event.
@@ -366,7 +366,7 @@ private:
       r.onButton = [id] { if (App *a = os::find(id.c_str())) openLater(a); };
     } else if (tooOld(l)) {
       r.button = "Get", r.style = PILL_OFF;
-      r.sub = "Needs yOS " + l.requires + " or later";
+      r.sub = "Needs yOS " + l.minYos + " or later";
     } else {
       r.button = "Get";
       r.onButton = [id] { appstore::install(id); };
@@ -653,7 +653,7 @@ private:
     String where = !installed ? String("Flash or SD card")
                               : String(String(mine.onSd ? "SD card" : "Flash") + " \xE2\x80\xBA /apps/" + id);
     ui::row(g, nullptr, p.gray, "Installs to", where.c_str(), nullptr, false);
-    String req = l.requires.length() ? String("yOS " + l.requires + " or later") : String("Any yOS");
+    String req = l.minYos.length() ? String("yOS " + l.minYos + " or later") : String("Any yOS");
     ui::row(g, nullptr, p.gray, "Requires", req.c_str(), nullptr, false);
     ui::row(g, nullptr, p.gray, "Permissions", l.needs.length() ? "Network, its own folder" : "Its own folder", nullptr, false);
 

@@ -13,6 +13,7 @@
 
 // TLS root certificates, embedded by board_build.embed_files (tools/gen_cert_bundle.py).
 extern const uint8_t certBundle[] asm("_binary_data_x509_crt_bundle_bin_start");
+extern const uint8_t certBundleEnd[] asm("_binary_data_x509_crt_bundle_bin_end");
 
 namespace ghupdate {
 namespace {
@@ -74,7 +75,7 @@ String bearer() {
 }
 
 void secure(WiFiClientSecure &c) {
-  c.setCACertBundle(certBundle);
+  c.setCACertBundle(certBundle, certBundleEnd - certBundle);
   c.setTimeout(15);
 }
 
@@ -283,7 +284,7 @@ void jobInstall() {
   uint8_t *buf = (uint8_t *)malloc(CHUNK);  // PSRAM (extmem threshold); the writer copies to internal RAM
   mbedtls_sha256_context hash;
   mbedtls_sha256_init(&hash);
-  mbedtls_sha256_starts_ret(&hash, 0);
+  mbedtls_sha256_starts(&hash, 0);
   uint32_t done = 0, lastData = millis(), lastShown = 0;
   bool ok = buf != nullptr;
   while (ok && done < size) {
@@ -296,7 +297,7 @@ void jobInstall() {
     int n = s->read(buf, min(avail, min(CHUNK, (size_t)(size - done))));
     if (n <= 0) continue;
     lastData = millis();
-    mbedtls_sha256_update_ret(&hash, buf, n);
+    mbedtls_sha256_update(&hash, buf, n);
     if (!fwupdate::write(buf, n)) ok = false;
     done += n;
     if (done - lastShown >= size / 100 || done == size) {
@@ -310,7 +311,7 @@ void jobInstall() {
                 (unsigned long)(millis() - t1), (unsigned long)(t1 - t0));
 
   uint8_t digest[32];
-  mbedtls_sha256_finish_ret(&hash, digest);
+  mbedtls_sha256_finish(&hash, digest);
   mbedtls_sha256_free(&hash);
   if (ok && sha.length() == 64) {
     char hex[65];

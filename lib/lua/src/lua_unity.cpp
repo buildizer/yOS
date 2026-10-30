@@ -12,6 +12,21 @@
 #include "lua_port.h"
 #include "lprefix.h"
 
+/* C/C++ headers first: lua sources define macros such as next(), which break libstdc++'s
+   <cmath> (GCC 14) when it is first pulled in further down by a lua source including math.h. */
+#include <ctype.h>
+#include <float.h>
+#include <limits.h>
+#include <locale.h>
+#include <math.h>
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
 /* core */
 #include "lzio.c"
 #include "lctype.c"

@@ -16,7 +16,7 @@ struct Listing {
   String summary;      // one line, under the name
   String description;
   String notes;        // What's New
-  String requires;     // lowest yOS version it runs on ("" = any)
+  String minYos;       // lowest yOS version it runs on ("" = any)
   String needs;        // e.g. "Wi-Fi" ("" = nothing)
   String developer;
   uint32_t size = 0;   // bytes of all its files

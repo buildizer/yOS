@@ -5,7 +5,7 @@
 #include <esp_partition.h>
 #include <esp_app_format.h>
 #include <esp_rom_crc.h>
-#include <esp32s3/rom/miniz.h>
+#include <miniz.h>  // the ROM inflater (esp_rom)
 #include <lvgl.h>
 #include "version.h"
 #include "os/ui.h"
@@ -144,7 +144,7 @@ bool put(const uint8_t *p, size_t n) {
   for (size_t at = 0; at < n; at += 32768) md5.add((uint8_t *)p + at, min<size_t>(n - at, 32768));
   if (fmt == GZIP) crc = esp_rom_crc32_le(crc, p, n);
   while (n) {
-    size_t k = min(n, bufSize - curLen);
+    size_t k = min<size_t>(n, bufSize - curLen);
     memcpy(cur + curLen, p, k);
     curLen += k;
     produced += k;

@@ -204,7 +204,10 @@ static void blSetFreq(uint32_t freq) {
   blBits = BL_BITS;
   while (blBits > 4 && (uint64_t)freq << blBits > 80000000ULL) blBits--;
   blMax = (1 << blBits) - 1;
-  ledcSetup(BL_CHANNEL, freq, blBits);
+  // Arduino core 3 addresses LEDC by pin: the first call attaches, later ones only retime it.
+  static bool attached = false;
+  if (!attached) attached = ledcAttachChannel(PIN_BL, freq, blBits, BL_CHANNEL);
+  else ledcChangeFrequency(PIN_BL, freq, blBits);
 }
 
 static void updateBacklight() {
@@ -228,7 +231,7 @@ static void updateBacklight() {
   float step = 255.0f * dt / FADE_MS;
   float before = blLevel;
   blLevel = blTarget > blLevel ? min<float>(blTarget, blLevel + step) : max<float>(blTarget, blLevel - step);
-  if (!blTesting && blDuty(blLevel) != blDuty(before)) ledcWrite(BL_CHANNEL, blDuty(blLevel));
+  if (!blTesting && blDuty(blLevel) != blDuty(before)) ledcWrite(PIN_BL, blDuty(blLevel));
 }
 
 static SemaphoreHandle_t uiLock = xSemaphoreCreateRecursiveMutex();
@@ -237,7 +240,7 @@ void hal::backlightOnNow() {
   blTarget = prefs::brightness();
   blLevel = blTarget;
   lastActivity = millis();
-  ledcWrite(BL_CHANNEL, blDuty(blLevel));
+  ledcWrite(PIN_BL, blDuty(blLevel));
 }
 
 void hal::setRotation(uint8_t r) {
@@ -253,7 +256,6 @@ void begin() {
   memset(lcd->getFramebuffer(), 0, W * H * sizeof(uint16_t));
   Cache_WriteBack_Addr((uint32_t)lcd->getFramebuffer(), W * H * sizeof(uint16_t));
   blSetFreq(prefs::backlightFreq());
-  ledcAttachPin(PIN_BL, BL_CHANNEL);
   touchStart();
 
   flushQueue = xQueueCreate(2, sizeof(FlushJob));
@@ -319,11 +321,11 @@ void testBacklight(uint32_t freq, float dutyPct) {
   blTesting = true;
   lastActivity = millis();
   blSetFreq(freq);
-  ledcWrite(BL_CHANNEL, uint32_t(constrain(dutyPct, 0.0f, 100.0f) / 100.0f * blMax + 0.5f));
+  ledcWrite(PIN_BL, uint32_t(constrain(dutyPct, 0.0f, 100.0f) / 100.0f * blMax + 0.5f));
 }
 void applyBacklightFreq() {
   blSetFreq(prefs::backlightFreq());
-  if (!blTesting) ledcWrite(BL_CHANNEL, blDuty(blLevel));
+  if (!blTesting) ledcWrite(PIN_BL, blDuty(blLevel));
 }
 Perf takePerf() {
   Perf p{perfFrames, perfFrames ? perfSumMs / perfFrames : 0, perfMaxMs, millis() - perfStart,
