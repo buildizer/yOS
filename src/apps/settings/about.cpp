@@ -1,5 +1,6 @@
 // Settings › General › About
 #include <esp_chip_info.h>
+#include <esp_heap_caps.h>
 #include <WiFi.h>
 #include "apps/settings/settings.h"
 #include "os/os.h"
@@ -10,6 +11,20 @@
 #define YOS_VERSION YOS_FIRMWARE_VERSION
 
 namespace settings {
+
+// Memory rows, refreshed every 2 s while About is open. "Lowest since boot" is the figure to watch:
+// Wi-Fi and TLS fail once internal RAM runs out, even while the current free amount looks fine.
+static lv_obj_t *memRam, *memLow, *memBlock, *memPsram;
+
+static void updateMemory() {
+  if (!memRam) return;
+  lv_label_set_text_fmt(memRam, "%u of %u KB free", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) >> 10),
+                        (unsigned)(heap_caps_get_total_size(MALLOC_CAP_INTERNAL) >> 10));
+  lv_label_set_text_fmt(memLow, "%u KB", (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) >> 10));
+  lv_label_set_text_fmt(memBlock, "%u KB", (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) >> 10));
+  lv_label_set_text_fmt(memPsram, "%u of %u KB free", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) >> 10),
+                        (unsigned)(heap_caps_get_total_size(MALLOC_CAP_SPIRAM) >> 10));
+}
 
 void aboutPage(lv_obj_t *appRoot) {
   ui::push(appRoot, "About", [appRoot](lv_obj_t *c) {
@@ -27,12 +42,17 @@ void aboutPage(lv_obj_t *appRoot) {
       g = ui::group(c, "Memory");
       snprintf(buf, sizeof(buf), "%lu MB", (unsigned long)(ESP.getFlashChipSize() >> 20));
       ui::row(g, nullptr, p.gray, "Flash", buf);
-      snprintf(buf, sizeof(buf), "%lu of %lu KB free", (unsigned long)(ESP.getFreeHeap() >> 10),
-               (unsigned long)(ESP.getHeapSize() >> 10));
-      ui::row(g, nullptr, p.gray, "RAM", buf);
-      snprintf(buf, sizeof(buf), "%lu of %lu KB free", (unsigned long)(ESP.getFreePsram() >> 10),
-               (unsigned long)(ESP.getPsramSize() >> 10));
-      ui::row(g, nullptr, p.gray, "PSRAM", buf);
+      memRam = ui::row(g, nullptr, p.gray, "Internal RAM", "").value;
+      memLow = ui::row(g, nullptr, p.gray, "Lowest Since Boot", "").value;
+      memBlock = ui::row(g, nullptr, p.gray, "Largest Block", "").value;
+      memPsram = ui::row(g, nullptr, p.gray, "PSRAM", "").value;
+      updateMemory();
+      lv_timer_t *tm = lv_timer_create([](lv_timer_t *) { updateMemory(); }, 2000, nullptr);
+      // The rows all go together when the page closes; stop the timer with the first.
+      lv_obj_add_event_cb(memRam, [](lv_event_t *e) {
+        lv_timer_del((lv_timer_t *)lv_event_get_user_data(e));
+        memRam = memLow = memBlock = memPsram = nullptr;
+      }, LV_EVENT_DELETE, tm);
       g = ui::group(c);
       uint32_t up = millis() / 1000;
       snprintf(buf, sizeof(buf), "%lud %luh %lum", (unsigned long)(up / 86400), (unsigned long)(up % 86400 / 3600),
