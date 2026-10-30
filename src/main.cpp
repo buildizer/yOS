@@ -5,6 +5,7 @@
 #include <ArduinoOTA.h>
 #include "config.h"
 #include "apps/apps.h"
+#include "apps/settings/settings.h"
 #include "os/hal.h"
 #include "os/boot_screen.h"
 #include "os/ota_screen.h"
@@ -93,6 +94,7 @@ void setup() {
   fwupdate::bootCheck();     // "update failed, rolled back" once, if the last install didn't come up
   fwupdate::confirmLater();
   bleBegin();
+  settings::pairingPromptBegin();
   webStart();
   startOta();
 

@@ -121,6 +121,85 @@ void devicePage(lv_obj_t *appRoot) {
 }
 }  // namespace
 
+// ---------- passkey prompt ----------
+// Shown over any screen while a phone pairs with us. ble posts the state into Status; this timer
+// (LVGL thread) polls the version, so nothing crosses from the NimBLE host task into LVGL.
+namespace {
+lv_obj_t *prompt = nullptr, *result = nullptr;  // alert scrims, null when closed
+uint32_t seen = 0, shownKey = 0;
+char shownName[32];
+
+void track(lv_obj_t **slot, lv_obj_t *scrim) {
+  *slot = scrim;
+  // An alert deletes itself when tapped: forget it then, unless the slot already holds a newer one.
+  lv_obj_add_event_cb(scrim, [](lv_event_t *e) {
+    auto **slot = (lv_obj_t **)lv_event_get_user_data(e);
+    if (*slot == lv_event_get_target(e)) *slot = nullptr;
+  }, LV_EVENT_DELETE, slot);
+}
+
+void closeAlert(lv_obj_t **slot) {
+  if (!*slot) return;
+  lv_obj_t *o = *slot;
+  *slot = nullptr;
+  lv_obj_del(o);
+}
+
+void showPrompt(const ble::Status &st) {
+  closeAlert(&prompt);
+  shownKey = st.passkey;
+  snprintf(shownName, sizeof(shownName), "%s", st.peerName);
+  char msg[64];
+  snprintf(msg, sizeof(msg), "Enter this code on %s:", st.peerName[0] ? st.peerName : "your phone");
+  lv_obj_t *scrim = ui::alert("Bluetooth Pairing", msg, {{"Cancel", ui::AlertAction::CANCEL, [] {
+                                prompt = nullptr;  // the alert is already deleting itself
+                                ble::cancelPairing();
+                              }}});
+  track(&prompt, scrim);
+  // The code itself, large, under the message: card > text column.
+  lv_obj_t *text = lv_obj_get_child(lv_obj_get_child(scrim, 0), 0);
+  char code[8];
+  snprintf(code, sizeof(code), "%03u %03u", (unsigned)(st.passkey / 1000), (unsigned)(st.passkey % 1000));
+  lv_obj_t *l = ui::label(text, code, theme::largeTitle, theme::p().label);
+  lv_obj_set_style_text_letter_space(l, 2, 0);
+  lv_obj_set_style_pad_top(l, 8, 0);
+}
+
+void showResult(const ble::Status &st) {
+  closeAlert(&result);
+  char title[48];
+  if (st.pairing == ble::PAIR_FAILED)
+    snprintf(title, sizeof(title), "Pairing Failed");
+  else if (st.peerName[0])
+    snprintf(title, sizeof(title), "Paired with %s", st.peerName);
+  else
+    snprintf(title, sizeof(title), "Phone Paired");
+  track(&result, ui::alert(title, nullptr, {{"OK", ui::AlertAction::CANCEL, [] { result = nullptr; }}}));
+  lv_timer_t *t = lv_timer_create([](lv_timer_t *) { closeAlert(&result); }, 3000, nullptr);  // goes away by itself
+  lv_timer_set_repeat_count(t, 1);
+}
+}  // namespace
+
+void pairingPromptBegin() {
+  lv_timer_create([](lv_timer_t *) {
+    ble::Status st = ble::status();
+    if (st.version == seen) return;
+    seen = st.version;
+    switch (st.pairing) {
+      case ble::PAIR_PASSKEY:
+        if (!prompt || st.passkey != shownKey || strcmp(st.peerName, shownName) != 0) showPrompt(st);
+        break;
+      case ble::PAIR_DONE:
+      case ble::PAIR_FAILED:
+        closeAlert(&prompt);
+        showResult(st);
+        ble::clearPairing();
+        break;
+      default: closeAlert(&prompt); break;  // cancelled, or the stack went down
+    }
+  }, 250, nullptr);
+}
+
 void bluetoothPage(lv_obj_t *appRoot) {
   auto scannedFlag = std::make_shared<bool>(false);
   livePage(appRoot, "Bluetooth", [appRoot, scannedFlag](lv_obj_t *c) {
@@ -139,9 +218,26 @@ void bluetoothPage(lv_obj_t *appRoot) {
     ui::switchRow(g, ICON_BLUETOOTH, p.blue, "Bluetooth", st.enabled, [](bool on) { ble::setEnabled(on); });
     if (!st.enabled) return;
 
-    g = ui::group(c, nullptr, "Lets nearby phones find this display as \xE2\x80\x9CyOS\xE2\x80\x9D and read its version.");
+    g = ui::group(c, nullptr, "Lets nearby phones find this display as \xE2\x80\x9CyOS\xE2\x80\x9D. "
+                     "Phones pair by typing a code shown on this screen.");
     ui::switchRow(g, nullptr, p.blue, "Discoverable as yOS", st.discoverable,
                   [](bool on) { ble::setDiscoverable(on); });
+
+    ble::Phone phones[ble::MAX_PHONES];
+    int np = ble::phones(phones, ble::MAX_PHONES);
+    if (np) {
+      g = ui::group(c, "Paired Phones");
+      for (int i = 0; i < np; i++) {
+        ble::Phone ph = phones[i];
+        ui::row(g, nullptr, p.gray, ph.name, nullptr, [ph] {
+          char title[48];
+          snprintf(title, sizeof(title), "Forget %s?", ph.name);
+          ui::alert(title, "It will need the pairing code again to connect.",
+                    {{"Cancel", ui::AlertAction::CANCEL, nullptr},
+                     {"Forget", ui::AlertAction::DESTRUCTIVE, [ph] { ble::forgetPhone(ph); }}});
+        }, false);
+      }
+    }
 
     if (st.hasBond) {
       g = ui::group(c, "My Devices");

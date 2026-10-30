@@ -276,7 +276,7 @@ lv_obj_t *button(lv_obj_t *parent, const char *text, lv_color_t fill, Action onT
 
 // ---------- alert ----------
 
-void alert(const char *title, const char *message, std::initializer_list<AlertAction> actions) {
+lv_obj_t *alert(const char *title, const char *message, std::initializer_list<AlertAction> actions) {
   const Palette &p = theme::p();
   lv_obj_t *scrim = box(lv_layer_top());
   lv_obj_set_size(scrim, 480, 480);
@@ -340,6 +340,7 @@ void alert(const char *title, const char *message, std::initializer_list<AlertAc
     lv_obj_add_event_cb(b, [](lv_event_t *e) { delete (std::pair<Action, lv_obj_t *> *)lv_event_get_user_data(e); },
                         LV_EVENT_DELETE, fn);
   }
+  return scrim;
 }
 }
 

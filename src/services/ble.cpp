@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
+#include <esp_random.h>
 #include <string.h>
 
 namespace ble {
@@ -13,8 +14,16 @@ const uint32_t SCAN_SECONDS = 5;
 const uint32_t RECONNECT_MS = 20000;
 const char *SVC_UUID = "7e5a0001-4f53-4c59-9a1d-79a05b1e0001";   // yOS device-info service
 const char *CHR_UUID = "7e5a0002-4f53-4c59-9a1d-79a05b1e0001";   // read-only "yOS <build>"
+const char *SEC_UUID = "7e5a0003-4f53-4c59-9a1d-79a05b1e0001";   // "paired": readable only over a MITM link
+// Anything a phone can use to control the board must only open on an encrypted, authenticated
+// (passkey) link: create it with these. Read-only info may stay plain READ.
+const uint32_t SECURE_READ = NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN;
+const uint32_t SECURE_WRITE = NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN;
 
-enum Cmd : uint8_t { C_ENABLE, C_DISABLE, C_DISCOVERABLE, C_SCAN, C_CONNECT, C_DISCONNECT, C_FORGET };
+enum Cmd : uint8_t {
+  C_ENABLE, C_DISABLE, C_DISCOVERABLE, C_SCAN, C_CONNECT, C_DISCONNECT, C_FORGET,
+  C_PHONE_PAIRED, C_FORGET_PHONE
+};
 struct Msg {
   Cmd cmd;
   bool flag;
@@ -33,6 +42,9 @@ Device devs[MAX_DEVICES];
 int devCount = 0;
 uint8_t bondType = 0;
 HeapCost startCost = {}, stopCost = {};
+Phone phoneList[MAX_PHONES];
+int phoneCount = 0;
+uint16_t peerConn = BLE_HS_CONN_HANDLE_NONE;  // the phone's link to our server
 
 // Task-only state
 bool stackUp = false;
@@ -89,23 +101,71 @@ class ClientCb : public NimBLEClientCallbacks {
 };
 ClientCb clientCb;
 
+// The phone's GAP Device Name (0x2A00), read from its own GATT server so the passkey prompt can
+// name it. Runs on the NimBLE host task; the read is open, so it usually lands before pairing starts.
+int onPeerName(uint16_t conn, const ble_gatt_error *err, ble_gatt_attr *attr, void *) {
+  if (err->status != 0 || !attr) return 0;
+  char name[sizeof(st.peerName)];
+  uint16_t n = min<uint16_t>(OS_MBUF_PKTLEN(attr->om), sizeof(name) - 1);
+  os_mbuf_copydata(attr->om, 0, n, name);
+  name[n] = 0;
+  Lock l;
+  if (conn != peerConn || !name[0]) return 0;
+  snprintf(st.peerName, sizeof(st.peerName), "%s", name);
+  touch();
+  return 0;
+}
+
+// Runs on the NimBLE host task: everything the UI needs goes into st and bumps the version.
 class ServerCb : public NimBLEServerCallbacks {
-  void onConnect(NimBLEServer *s) override {
+  void onConnect(NimBLEServer *s, ble_gap_conn_desc *desc) override {
     {
       Lock l;
       st.peerConnected = true;
+      st.peerName[0] = 0;
+      peerConn = desc->conn_handle;
       touch();
     }
+    ble_uuid16_t name = BLE_UUID16_INIT(0x2A00);
+    ble_gattc_read_by_uuid(desc->conn_handle, 1, 0xFFFF, &name.u, onPeerName, nullptr);
   }
-  void onDisconnect(NimBLEServer *s) override {
+  void onDisconnect(NimBLEServer *s, ble_gap_conn_desc *desc) override {
     bool disc;
     {
       Lock l;
       st.peerConnected = s->getConnectedCount() > 0;
+      peerConn = BLE_HS_CONN_HANDLE_NONE;
+      if (st.pairing == PAIR_PASSKEY) st.pairing = PAIR_FAILED;  // walked away mid-pairing
       disc = st.discoverable;
       touch();
     }
     if (disc) NimBLEDevice::getAdvertising()->start();
+  }
+  // We are DisplayOnly: the stack asks for the key the phone's user must type.
+  uint32_t onPassKeyRequest() override {
+    uint32_t key = esp_random() % 1000000;
+    Lock l;
+    st.pairing = PAIR_PASSKEY;
+    st.passkey = key;
+    touch();
+    return key;
+  }
+  // Also called when a bonded phone just re-encrypts: only a pairing we showed a code for reports.
+  void onAuthenticationComplete(ble_gap_conn_desc *desc) override {
+    bool ok = desc->sec_state.encrypted && desc->sec_state.authenticated;
+    Msg m = {};
+    {
+      Lock l;
+      if (st.pairing != PAIR_PASSKEY) return;
+      st.pairing = ok ? PAIR_DONE : PAIR_FAILED;
+      touch();
+      if (!ok) return;
+      m.cmd = C_PHONE_PAIRED;
+      snprintf(m.name, sizeof(m.name), "%s", st.peerName);
+    }
+    m.type = desc->peer_id_addr.type;
+    snprintf(m.addr, sizeof(m.addr), "%s", NimBLEAddress(desc->peer_id_addr).toString().c_str());
+    xQueueSend(queue, &m, 0);  // the ble task stores the name and refreshes the list
   }
 };
 ServerCb serverCb;
@@ -126,6 +186,49 @@ void saveBond(const char *addr, uint8_t type, const char *name) {
   nvs.putUChar("atype", type);
   nvs.putString("name", name);
   loadBond();
+}
+
+// Phone names live in their own namespace, keyed by the address without colons (NVS keys max 15 chars).
+void phoneKey(const char *addr, char *key) {
+  int k = 0;
+  for (const char *c = addr; *c && k < 12; c++)
+    if (*c != ':') key[k++] = *c;
+  key[k] = 0;
+}
+
+// Rebuild the phone list from NimBLE's bond store. Every bond except the remembered device is a phone.
+void refreshPhones() {
+  Preferences names;
+  names.begin("yosphones", false);  // read-write: a missing namespace is created, not an error
+  Phone list[MAX_PHONES];
+  int n = 0;
+  int bonds = NimBLEDevice::getNumBonds();
+  for (int i = 0; i < bonds && n < MAX_PHONES; i++) {
+    NimBLEAddress a = NimBLEDevice::getBondedAddress(i);
+    std::string s = a.toString();
+    { Lock l; if (st.hasBond && strcmp(s.c_str(), st.bondAddr) == 0) continue; }
+    char key[13];
+    phoneKey(s.c_str(), key);
+    snprintf(list[n].addr, sizeof(list[n].addr), "%s", s.c_str());
+    snprintf(list[n].name, sizeof(list[n].name), "%s", names.getString(key, "Phone").c_str());
+    list[n].type = a.getType();
+    n++;
+  }
+  names.end();
+  Lock l;
+  memcpy(phoneList, list, n * sizeof(Phone));
+  phoneCount = n;
+  touch();
+}
+
+void savePhoneName(const char *addr, const char *name) {
+  if (!name[0]) return;
+  char key[13];
+  phoneKey(addr, key);
+  Preferences names;
+  names.begin("yosphones", false);
+  names.putString(key, name);
+  names.end();
 }
 
 // ---------- stack lifecycle (ble task only) ----------
@@ -171,14 +274,21 @@ bool stackStart() {
     setError("Bluetooth couldn't start. Not enough memory.");
     return false;
   }
-  if (!st.hasBond) NimBLEDevice::deleteAllBonds();            // drop bonds left by a forget while Bluetooth was off
-  NimBLEDevice::setSecurityAuth(true, false, true);          // bonding, no MITM (Just Works), LE Secure Connections
-  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+  String gone = nvs.getString("deladdr", "");                 // a device forgotten while Bluetooth was off
+  if (gone.length() == 17) NimBLEDevice::deleteBond(NimBLEAddress(std::string(gone.c_str()), nvs.getUChar("deltype", 0)));
+  nvs.remove("deladdr");
+  nvs.remove("deltype");
+  // Phones pair with a passkey shown on our screen: bonding, MITM, LE Secure Connections.
+  // doConnect() drops to Just Works while it pairs with a device itself.
+  NimBLEDevice::setSecurityAuth(true, true, true);
+  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
   server = NimBLEDevice::createServer();
   server->setCallbacks(&serverCb);
   NimBLEService *svc = server->createService(SVC_UUID);
   NimBLECharacteristic *chr = svc->createCharacteristic(CHR_UUID, NIMBLE_PROPERTY::READ);
   chr->setValue(std::string("yOS (" __DATE__ ")"));
+  // Reading this makes a phone (iOS especially) pair; it also proves the link is authenticated.
+  svc->createCharacteristic(SEC_UUID, SECURE_READ)->setValue(std::string("paired"));
   svc->start();
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
   adv->addServiceUUID(SVC_UUID);
@@ -189,6 +299,7 @@ bool stackStart() {
   Serial.printf("BLE up: heap %u -> %u (cost %d), internal %u -> %u (cost %d)\n", c.freeBefore, c.freeAfter,
                 (int)c.freeBefore - (int)c.freeAfter, c.internalBefore, c.internalAfter,
                 (int)c.internalBefore - (int)c.internalAfter);
+  refreshPhones();
   Lock l;
   startCost = c;
   st.ready = true;
@@ -210,6 +321,10 @@ void stackStop() {
   HeapCost c = {};
   c.freeBefore = freeHeap();
   c.internalBefore = freeInternal();
+  {
+    Lock l;   // no more cancelPairing() calls into the host from here on
+    peerConn = BLE_HS_CONN_HANDLE_NONE;
+  }
   NimBLEDevice::getScan()->stop();
   applyAdvertising(false);
   dropClient();
@@ -229,7 +344,10 @@ void stackStop() {
   st.peerConnected = false;
   st.link = LINK_IDLE;
   st.paired = false;
+  if (st.pairing == PAIR_PASSKEY) st.pairing = PAIR_FAILED;
+  peerConn = BLE_HS_CONN_HANDLE_NONE;
   devCount = 0;
+  phoneCount = 0;
   touch();
 }
 
@@ -272,7 +390,13 @@ bool doConnect(const char *addr, uint8_t type, const char *name, bool user) {
   bool ok = client->connect(NimBLEAddress(std::string(addr), type), false);
   bool paired = false;
   if (ok) {
-    paired = client->secureConnection();   // Just Works pairing + bonding; many peripherals simply don't need it
+    // Just Works pairing + bonding; many peripherals simply don't need it. Devices we connect to rarely
+    // have a keyboard, so drop our DisplayOnly + MITM (meant for phones) while we pair.
+    NimBLEDevice::setSecurityAuth(true, false, true);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+    paired = client->secureConnection();
+    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     ok = client->isConnected();
   }
   if (!ok) {
@@ -333,6 +457,29 @@ void handle(const Msg &m) {
       st.paired = false;
       st.connectFailed = false;
       touch();
+      break;
+    }
+    case C_PHONE_PAIRED:
+      savePhoneName(m.addr, m.name);
+      if (stackUp) refreshPhones();
+      break;
+    case C_FORGET_PHONE: {
+      if (!stackUp) break;
+      NimBLEAddress a(std::string(m.addr), m.type);
+      // Drop the link first if it's this phone: deleting the bond under a live link confuses the peer.
+      uint16_t conn;
+      { Lock l; conn = peerConn; }
+      ble_gap_conn_desc d;
+      if (conn != BLE_HS_CONN_HANDLE_NONE && ble_gap_conn_find(conn, &d) == 0 && NimBLEAddress(d.peer_id_addr) == a)
+        ble_gap_terminate(conn, BLE_ERR_REM_USER_CONN_TERM);
+      NimBLEDevice::deleteBond(a);
+      char key[13];
+      phoneKey(m.addr, key);
+      Preferences names;
+      names.begin("yosphones", false);
+      names.remove(key);
+      names.end();
+      refreshPhones();
       break;
     }
   }
@@ -476,11 +623,55 @@ void forget() {
   if (alive) {
     xQueueSend(queue, &m, 0);
   } else {
+    // The stack is down: its bond store can't be touched. stackStart() deletes the bond next time.
+    nvs.putString("deladdr", st.bondAddr);
+    nvs.putUChar("deltype", bondType);
     nvs.remove("addr");
     nvs.remove("name");
     nvs.remove("atype");
     loadBond();
   }
+}
+
+int phones(Phone *out, int max) {
+  Lock l;
+  int n = min(phoneCount, max);
+  memcpy(out, phoneList, n * sizeof(Phone));
+  return n;
+}
+
+void forgetPhone(const Phone &p) {
+  Msg m = msg(C_FORGET_PHONE);
+  m.type = p.type;
+  snprintf(m.addr, sizeof(m.addr), "%s", p.addr);
+  {
+    Lock l;   // drop it from the list now so the UI reflects it; the task deletes the bond
+    for (int i = 0; i < phoneCount; i++)
+      if (strcmp(phoneList[i].addr, p.addr) == 0) {
+        memmove(&phoneList[i], &phoneList[i + 1], (phoneCount - i - 1) * sizeof(Phone));
+        phoneCount--;
+        touch();
+        break;
+      }
+  }
+  post(m);
+}
+
+// Called from the UI: terminating the link aborts the pairing on both sides. The host API is
+// thread-safe, and going through the queue could wait behind a 5 s scan.
+void cancelPairing() {
+  Lock l;   // held across the call so stackStop() can't deinit the host underneath it
+  if (st.pairing != PAIR_PASSKEY) return;
+  st.pairing = PAIR_NONE;   // cancelled on purpose: no "failed" result
+  if (peerConn != BLE_HS_CONN_HANDLE_NONE) ble_gap_terminate(peerConn, BLE_ERR_REM_USER_CONN_TERM);
+  touch();
+}
+
+void clearPairing() {
+  Lock l;
+  if (st.pairing == PAIR_PASSKEY || st.pairing == PAIR_NONE) return;
+  st.pairing = PAIR_NONE;
+  touch();
 }
 
 HeapCost lastStartCost() { Lock l; return startCost; }

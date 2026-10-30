@@ -49,5 +49,6 @@ struct AlertAction {
   enum Style { NORMAL, CANCEL, DESTRUCTIVE } style;
   Action run;
 };
-void alert(const char *title, const char *message, std::initializer_list<AlertAction> actions);
+// Returns the alert's scrim (on lv_layer_top), so a caller can close it early with lv_obj_del().
+lv_obj_t *alert(const char *title, const char *message, std::initializer_list<AlertAction> actions);
 }
