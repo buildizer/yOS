@@ -1,0 +1,376 @@
+<!doctype html>
+<!-- yOS Remote: control a yOS display and move files over Bluetooth LE (Web Bluetooth).
+     One self-contained file: open it from GitHub Pages, any HTTPS host, or localhost. Protocol: README.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yOS Remote</title>
+<style>
+  :root { --bg:#f2f2f7; --card:#fff; --text:#000; --dim:#8e8e93; --sep:#d1d1d6; --accent:#007aff; --red:#ff3b30; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#000; --card:#1c1c1e; --text:#fff; --dim:#8e8e93; --sep:#38383a; --accent:#0a84ff; --red:#ff453a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.35 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:16px 16px 48px; }
+  h1 { font-size:30px; margin:8px 0 4px; }
+  h2 { font-size:13px; font-weight:400; text-transform:uppercase; color:var(--dim); margin:24px 16px 6px; }
+  .card { background:var(--card); border-radius:12px; padding:12px 16px; }
+  .row { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--sep); }
+  .row:first-child { border-top:0; }
+  .grow { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dim { color:var(--dim); font-size:14px; }
+  .note { color:var(--dim); font-size:13px; margin:8px 16px; }
+  button, .btn { font:inherit; border:0; border-radius:10px; padding:8px 14px; background:var(--accent); color:#fff; cursor:pointer; }
+  button.plain { background:transparent; color:var(--accent); padding:6px 8px; }
+  button.danger { background:transparent; color:var(--red); padding:6px 8px; }
+  button:disabled { opacity:.4; cursor:default; }
+  .buttons { display:flex; flex-wrap:wrap; gap:8px; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .seg { display:flex; background:var(--sep); border-radius:9px; padding:2px; }
+  .seg button { flex:1; background:transparent; color:var(--text); padding:6px; border-radius:7px; }
+  .seg button.on { background:var(--card); }
+  .path { font-family:ui-monospace, Menlo, monospace; font-size:14px; }
+  progress { width:100%; height:6px; }
+  .hidden { display:none !important; }
+  #status.err { color:var(--red); }
+  .file { cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>yOS Remote</h1>
+  <div id="status" class="dim">Not connected.</div>
+
+  <div id="unsupported" class="card hidden" style="margin-top:16px">
+    This browser has no Web Bluetooth. Use Chrome or Edge on Android, Windows, macOS or ChromeOS.
+    On iPhone and iPad, Safari can't do Bluetooth: open this page in the <b>Bluefy</b> browser instead.
+  </div>
+
+  <h2>Connection</h2>
+  <div class="card">
+    <div class="row">
+      <div class="grow" id="devName">On the display, turn on Settings › Bluetooth › Discoverable as yOS.</div>
+      <button id="connect">Connect</button>
+      <button id="disconnect" class="plain hidden">Disconnect</button>
+    </div>
+  </div>
+  <p class="note">The first time, the display shows a 6-digit code: type it on this device to pair.
+    Works in Chrome and Edge on Android, Windows, macOS and ChromeOS. Not in iOS Safari (use Bluefy on iPhone).</p>
+
+  <div id="ui" class="hidden">
+    <h2>Display</h2>
+    <div class="card">
+      <div class="row"><div class="grow" id="info">…</div><button class="plain" id="refreshInfo">Refresh</button></div>
+      <div class="row buttons">
+        <button id="home">Home</button>
+        <button id="screenOff">Screen off</button>
+        <button id="screenOn">Screen on</button>
+      </div>
+      <div class="row"><span class="dim">Brightness</span><input id="bright" type="range" min="0" max="100"></div>
+    </div>
+
+    <h2>Apps</h2>
+    <div class="card" id="apps"></div>
+
+    <h2>Files</h2>
+    <div class="card">
+      <div class="row"><div class="seg grow" id="roots">
+        <button data-root="flash" class="on">Internal flash</button><button data-root="sd">SD card</button>
+      </div></div>
+      <div class="row">
+        <button class="plain" id="up" title="Up">‹</button>
+        <div class="grow path" id="path">/</div>
+        <button class="plain" id="mkdir">New folder</button>
+        <label class="btn" id="uploadLabel">Upload<input id="upload" type="file" multiple class="hidden"></label>
+      </div>
+      <div id="xfer" class="row hidden">
+        <div class="grow"><div id="xferText" class="dim"></div><progress id="xferBar" max="1" value="0"></progress></div>
+        <button class="danger" id="cancel">Cancel</button>
+      </div>
+      <div id="files"></div>
+      <div class="row dim" id="space"></div>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+const SVC  = "7e5a0001-4f53-4c59-9a1d-79a05b1e0001";
+const SEC  = "7e5a0003-4f53-4c59-9a1d-79a05b1e0001";  // reading it makes the phone pair (passkey)
+const CMD  = "7e5a0004-4f53-4c59-9a1d-79a05b1e0001";  // JSON commands in, JSON lines out
+const DATA = "7e5a0005-4f53-4c59-9a1d-79a05b1e0001";  // raw file bytes
+
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder();
+let device = null, cmdChr = null, dataChr = null;
+let gattQueue = Promise.resolve();   // Web Bluetooth allows one GATT operation at a time
+let lineBuf = "", nextTag = 1;
+const waiting = new Map();           // tag -> {resolve, reject, timer}
+let xfer = null;                     // the running transfer's handlers
+let root = "flash", cwd = "/";
+
+function setStatus(text, err) { $("status").textContent = text; $("status").className = err ? "err" : "dim"; }
+function gatt(fn) { const p = gattQueue.then(fn); gattQueue = p.catch(() => {}); return p; }
+function fmtSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+function join(dir, name) { return (dir === "/" ? "" : dir) + "/" + name; }
+function el(tag, props, ...kids) {
+  const e = Object.assign(document.createElement(tag), props || {});
+  for (const k of kids) e.append(k);
+  return e;
+}
+
+// ---------- link ----------
+
+if (!navigator.bluetooth) { $("unsupported").classList.remove("hidden"); $("connect").disabled = true; }
+
+$("connect").onclick = async () => {
+  try {
+    setStatus("Choose yOS in the list…");
+    device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }, { name: "yOS" }], optionalServices: [SVC] });
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    setStatus("Connecting…");
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SVC);
+    setStatus("Pairing… if the display shows a code, type it here.");
+    await (await svc.getCharacteristic(SEC)).readValue();  // fails unless paired with the passkey
+    cmdChr = await svc.getCharacteristic(CMD);
+    dataChr = await svc.getCharacteristic(DATA);
+    cmdChr.addEventListener("characteristicvaluechanged", e => onCmdBytes(e.target.value));
+    dataChr.addEventListener("characteristicvaluechanged", e => xfer && xfer.onData && xfer.onData(e.target.value));
+    await cmdChr.startNotifications();
+    await dataChr.startNotifications();
+    $("devName").textContent = device.name || "yOS";
+    $("connect").classList.add("hidden");
+    $("disconnect").classList.remove("hidden");
+    $("ui").classList.remove("hidden");
+    setStatus("Connected.");
+    await refreshInfo();
+    await refreshApps();
+    await listFiles();
+  } catch (e) {
+    setStatus(e.name === "NotFoundError" ? "No display chosen." : "Couldn't connect: " + e.message, e.name !== "NotFoundError");
+    if (device && device.gatt.connected) device.gatt.disconnect();
+  }
+};
+$("disconnect").onclick = () => device && device.gatt.disconnect();
+
+function onDisconnected() {
+  cmdChr = dataChr = null;
+  gattQueue = Promise.resolve();
+  lineBuf = "";
+  for (const w of waiting.values()) { clearTimeout(w.timer); w.reject(new Error("disconnected")); }
+  waiting.clear();
+  if (xfer) xfer.finish({ ok: false, error: "disconnected" });
+  $("ui").classList.add("hidden");
+  $("connect").classList.remove("hidden");
+  $("disconnect").classList.add("hidden");
+  setStatus("Disconnected.");
+}
+
+// Replies arrive as JSON lines split across notifications.
+function onCmdBytes(view) {
+  lineBuf += dec.decode(view, { stream: true });
+  let nl;
+  while ((nl = lineBuf.indexOf("\n")) >= 0) {
+    const line = lineBuf.slice(0, nl);
+    lineBuf = lineBuf.slice(nl + 1);
+    let msg;
+    try { msg = JSON.parse(line); } catch { continue; }
+    if (msg.ev === "ack") { if (xfer && xfer.onAck) xfer.onAck(msg.done); continue; }
+    if (msg.cmd === "get_done" || msg.cmd === "put_done") { if (xfer) xfer.finish(msg); continue; }
+    const w = waiting.get(msg.tag);
+    if (!w) continue;
+    waiting.delete(msg.tag);
+    clearTimeout(w.timer);
+    msg.ok ? w.resolve(msg) : w.reject(new Error(msg.error || "failed"));
+  }
+}
+
+function request(cmd, args = {}, timeoutMs = 15000) {
+  if (!cmdChr) return Promise.reject(new Error("not connected"));
+  const tag = nextTag++;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { waiting.delete(tag); reject(new Error("no reply")); }, timeoutMs);
+    waiting.set(tag, { resolve, reject, timer });
+    gatt(() => cmdChr.writeValueWithResponse(enc.encode(JSON.stringify({ cmd, tag, ...args }))))
+      .catch(e => { waiting.delete(tag); clearTimeout(timer); reject(e); });
+  });
+}
+
+async function act(fn) {
+  try { await fn(); } catch (e) { setStatus(e.message, true); }
+}
+
+// ---------- display and apps ----------
+
+async function refreshInfo() {
+  const r = await request("info");
+  const wifi = r.wifi.connected ? `Wi-Fi ${r.wifi.ssid} (${r.wifi.ip})` : "Wi-Fi off";
+  $("info").textContent = `yOS ${r.version} · ${wifi} · ${Math.round(r.heap.internal / 1024)} KB free`;
+  $("bright").value = r.brightness;
+}
+$("refreshInfo").onclick = () => act(refreshInfo);
+$("home").onclick = () => act(() => request("home"));
+$("screenOff").onclick = () => act(() => request("screen", { on: false }));
+$("screenOn").onclick = () => act(() => request("screen", { on: true }));
+
+// While dragging: apply only, at most every 150 ms. On release: apply and save.
+let brightTimer = null;
+$("bright").oninput = () => {
+  if (brightTimer) return;
+  brightTimer = setTimeout(() => {
+    brightTimer = null;
+    act(() => request("brightness", { level: +$("bright").value, save: false }));
+  }, 150);
+};
+$("bright").onchange = () => act(() => request("brightness", { level: +$("bright").value }));
+
+async function refreshApps() {
+  const r = await request("apps");
+  const box = $("apps");
+  box.replaceChildren();
+  for (const a of r.apps) {
+    const open = el("button", { className: "plain", textContent: a.open ? "Open now" : "Open", disabled: a.open });
+    open.onclick = () => act(async () => { await request("open", { id: a.id }); setTimeout(() => act(refreshApps), 600); });
+    box.append(el("div", { className: "row" }, el("div", { className: "grow", textContent: a.name }),
+                  el("span", { className: "dim", textContent: a.running ? "running" : "" }), open));
+  }
+}
+
+// ---------- files ----------
+
+for (const b of $("roots").children) {
+  b.onclick = () => {
+    for (const o of $("roots").children) o.classList.toggle("on", o === b);
+    root = b.dataset.root;
+    cwd = "/";
+    act(listFiles);
+  };
+}
+$("up").onclick = () => { if (cwd === "/") return; cwd = cwd.slice(0, cwd.lastIndexOf("/")) || "/"; act(listFiles); };
+
+async function listFiles() {
+  $("path").textContent = (root === "sd" ? "SD:" : "Flash:") + cwd;
+  const box = $("files");
+  box.replaceChildren(el("div", { className: "row dim", textContent: "Loading…" }));
+  let r;
+  try { r = await request("files", { root, path: cwd }); }
+  catch (e) { box.replaceChildren(el("div", { className: "row dim", textContent: e.message })); return; }
+  r.entries.sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
+  box.replaceChildren();
+  if (!r.entries.length) box.append(el("div", { className: "row dim", textContent: "Empty folder" }));
+  for (const f of r.entries) {
+    const path = join(cwd, f.name);
+    const name = el("div", { className: "grow" + (f.dir ? " file" : ""), textContent: (f.dir ? "📁 " : "") + f.name });
+    if (f.dir) name.onclick = () => { cwd = path; act(listFiles); };
+    const row = el("div", { className: "row" }, name, el("span", { className: "dim", textContent: f.dir ? "" : fmtSize(f.size) }));
+    if (!f.dir) {
+      const dl = el("button", { className: "plain", textContent: "Download" });
+      dl.onclick = () => act(() => download(path, f.name));
+      row.append(dl);
+    }
+    const del = el("button", { className: "danger", textContent: "Delete" });
+    del.onclick = () => { if (confirm(`Delete ${f.name}?`)) act(async () => { await request("delete", { root, path }); await listFiles(); }); };
+    row.append(del);
+    box.append(row);
+  }
+  if (r.more) box.append(el("div", { className: "row dim", textContent: "More entries not shown." }));
+  $("space").textContent = r.total ? `${fmtSize(r.total - r.used)} free of ${fmtSize(r.total)}` : "";
+}
+
+$("mkdir").onclick = () => {
+  const name = prompt("Folder name");
+  if (!name) return;
+  if (name.includes("/") || name.includes("..")) return setStatus("Invalid name.", true);
+  act(async () => { await request("mkdir", { root, path: join(cwd, name) }); await listFiles(); });
+};
+
+function showXfer(text, done, total) {
+  $("xfer").classList.remove("hidden");
+  $("xferText").textContent = `${text} · ${fmtSize(done)} of ${fmtSize(total)}`;
+  $("xferBar").value = total ? done / total : 1;
+}
+function hideXfer() { $("xfer").classList.add("hidden"); }
+$("cancel").onclick = () => { if (xfer) xfer.cancel = true; request("cancel").catch(() => {}); };
+function setBusy(b) { $("upload").disabled = b; $("uploadLabel").style.opacity = b ? .4 : 1; }
+
+// Starts a transfer; resolves with the get_done / put_done message. Drops it after 20 s without progress.
+function beginXfer(handlers) {
+  if (xfer) throw new Error("A transfer is already running.");
+  let last = Date.now(), watchdog;
+  const done = new Promise((resolve, reject) => {
+    xfer = Object.assign(handlers, {
+      touch() { last = Date.now(); },
+      finish(m) { clearInterval(watchdog); xfer = null; setBusy(false); hideXfer(); m.ok ? resolve(m) : reject(new Error(m.error)); },
+    });
+    watchdog = setInterval(() => {
+      if (Date.now() - last > 20000) { request("cancel").catch(() => {}); xfer && xfer.finish({ ok: false, error: "transfer stalled" }); }
+    }, 1000);
+  });
+  setBusy(true);
+  return done;
+}
+
+async function download(path, name) {
+  const parts = [];
+  let got = 0, size = 0;
+  const done = beginXfer({
+    onData(v) {
+      parts.push(new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength)));
+      got += v.byteLength;
+      this.touch();
+      showXfer("Downloading " + name, got, size);
+    },
+  });
+  try { size = (await request("get", { root, path })).size; }
+  catch (e) { xfer && xfer.finish({ ok: false, error: e.message }); return done; }
+  showXfer("Downloading " + name, got, size);
+  await done;
+  if (got !== size) throw new Error(`Got ${got} of ${size} bytes.`);
+  const a = el("a", { href: URL.createObjectURL(new Blob(parts)), download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  setStatus(`Downloaded ${name}.`);
+}
+
+$("upload").onchange = async () => {
+  const files = [...$("upload").files];
+  $("upload").value = "";
+  for (const f of files) {
+    try { await upload(f); } catch (e) { setStatus(`${f.name}: ${e.message}`, true); break; }
+  }
+  act(listFiles);
+};
+
+async function upload(file) {
+  if (file.name.includes("/") || file.name.startsWith(".")) throw new Error("Unsupported file name.");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const path = join(cwd, file.name);
+  let acked = 0, wake = null;
+  const done = beginXfer({ onAck(n) { acked = n; this.touch(); if (wake) wake(); } });
+  let r;
+  try { r = await request("put", { root, path, size: bytes.length }); }
+  catch (e) { xfer && xfer.finish({ ok: false, error: e.message }); return done; }
+  const win = r.window, chunk = r.chunk || 20, x = xfer;
+  // The board acks every few KB; never run more than its window ahead of the last ack.
+  let sent = 0;
+  while (sent < bytes.length && xfer === x && !x.cancel) {
+    const room = win - (sent - acked);
+    if (room <= 0) { await new Promise(res => { wake = res; setTimeout(res, 1000); }); wake = null; continue; }
+    const n = Math.min(chunk, room, bytes.length - sent);
+    const piece = bytes.subarray(sent, sent + n);
+    await gatt(() => dataChr.writeValueWithoutResponse ? dataChr.writeValueWithoutResponse(piece) : dataChr.writeValue(piece));
+    sent += n;
+    showXfer("Uploading " + file.name, acked, bytes.length);
+  }
+  await done;
+  setStatus(`Uploaded ${file.name}.`);
+}
+</script>
+</body>
+</html>

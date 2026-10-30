@@ -95,6 +95,7 @@ void setup() {
   fwupdate::confirmLater();
   bleBegin();
   settings::pairingPromptBegin();
+  settings::remoteBegin();
   webStart();
   startOta();
 

@@ -188,6 +188,7 @@ static bool blTesting = false;
 static uint8_t blTarget = 0;
 static uint32_t lastBlStep = 0;
 static bool alarmOn = false;
+static bool forcedOff = false;  // sleepNow(): dark until a touch or wake()
 
 // Brightness levels (0..255, as stored in prefs and used for fading) are perceptually linear:
 // duty = floor + (1 - floor) * (level/255)^1.8. Measured on this panel: below ~12-16 % duty the
@@ -216,7 +217,8 @@ static void updateBacklight() {
   uint32_t idle = millis() - lastActivity;
   uint8_t full = prefs::brightness();
   uint32_t dimAfter = prefs::dimAfterMin() * 60000UL;
-  if (alarmOn || dimAfter == 0) blTarget = full;
+  if (forcedOff) blTarget = 0;
+  else if (alarmOn || dimAfter == 0) blTarget = full;
   else if (idle > OFF_AFTER_MS) blTarget = 0;
   else if (idle > dimAfter) blTarget = full * 2 / 5;  // dimmed, still readable across the room
   else blTarget = full;
@@ -297,7 +299,11 @@ SystemGesture takeGesture() {
   return g;
 }
 
-void wake() { lastActivity = millis(); }
+void wake() {
+  lastActivity = millis();
+  forcedOff = false;
+}
+void sleepNow() { forcedOff = true; }
 void setAlarm(bool on) {
   if (on && !alarmOn) wake();
   alarmOn = on;

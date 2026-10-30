@@ -14,6 +14,7 @@ void unlock();
 void loop();                       // runs LVGL timers and backlight fading
 SystemGesture takeGesture();       // edge swipes detected since the last call
 void wake();                       // full brightness now, reset idle timer
+void sleepNow();                   // backlight off until the next touch or wake()
 void setAlarm(bool on);            // keep the screen on while something is down
 bool screenAsleep();
 uint16_t *framebuffer();

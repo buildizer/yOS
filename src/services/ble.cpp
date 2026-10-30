@@ -1,4 +1,5 @@
 #include "services/ble.h"
+#include "services/ble_remote.h"
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <Preferences.h>
@@ -15,10 +16,7 @@ const uint32_t RECONNECT_MS = 20000;
 const char *SVC_UUID = "7e5a0001-4f53-4c59-9a1d-79a05b1e0001";   // yOS device-info service
 const char *CHR_UUID = "7e5a0002-4f53-4c59-9a1d-79a05b1e0001";   // read-only "yOS <build>"
 const char *SEC_UUID = "7e5a0003-4f53-4c59-9a1d-79a05b1e0001";   // "paired": readable only over a MITM link
-// Anything a phone can use to control the board must only open on an encrypted, authenticated
-// (passkey) link: create it with these. Read-only info may stay plain READ.
-const uint32_t SECURE_READ = NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN;
-const uint32_t SECURE_WRITE = NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN;
+const uint16_t PREFERRED_MTU = 247;   // 244-byte payloads: one LE data-length packet each (remote file transfers)
 
 enum Cmd : uint8_t {
   C_ENABLE, C_DISABLE, C_DISCOVERABLE, C_SCAN, C_CONNECT, C_DISCONNECT, C_FORGET,
@@ -139,6 +137,7 @@ class ServerCb : public NimBLEServerCallbacks {
       disc = st.discoverable;
       touch();
     }
+    remote::peerGone();
     if (disc) NimBLEDevice::getAdvertising()->start();
   }
   // We are DisplayOnly: the stack asks for the key the phone's user must type.
@@ -289,7 +288,9 @@ bool stackStart() {
   chr->setValue(std::string("yOS (" __DATE__ ")"));
   // Reading this makes a phone (iOS especially) pair; it also proves the link is authenticated.
   svc->createCharacteristic(SEC_UUID, SECURE_READ)->setValue(std::string("paired"));
+  remote::addTo(svc);
   svc->start();
+  NimBLEDevice::setMTU(PREFERRED_MTU);
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
   adv->addServiceUUID(SVC_UUID);
   adv->setScanResponse(true);
@@ -325,6 +326,7 @@ void stackStop() {
     Lock l;   // no more cancelPairing() calls into the host from here on
     peerConn = BLE_HS_CONN_HANDLE_NONE;
   }
+  remote::detach();
   NimBLEDevice::getScan()->stop();
   applyAdvertising(false);
   dropClient();
@@ -682,6 +684,7 @@ void bleBegin() {
   using namespace ble;
   mtx = xSemaphoreCreateMutex();
   queue = xQueueCreate(8, sizeof(Msg));
+  remote::init();
   nvs.begin("yosble", false);
   loadBond();
   bool en = nvs.getBool("en", false);

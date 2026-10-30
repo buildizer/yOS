@@ -66,4 +66,23 @@ void clearPairing();                 // the UI has shown the DONE / FAILED resul
 struct HeapCost { uint32_t freeBefore, freeAfter, internalBefore, internalAfter; };
 HeapCost lastStartCost();            // heap at the last stack start (before init / after init)
 HeapCost lastStopCost();             // heap at the last stack stop (before deinit / after deinit)
+
+// Phone remote (services/ble_remote.cpp, protocol in README.md). A paired phone's UI requests wait
+// here for the LVGL thread, which polls takeRemoteRequest(); transfer() feeds the progress pill.
+enum RemoteAction : uint8_t { RA_HOME, RA_OPEN, RA_BRIGHTNESS, RA_SCREEN };
+struct RemoteRequest {
+  RemoteAction action;
+  int value;         // RA_BRIGHTNESS: 10..255, RA_SCREEN: 1 on / 0 off
+  bool save;         // RA_BRIGHTNESS: persist (false while a slider is being dragged)
+  char app[32];      // RA_OPEN: app id
+};
+bool takeRemoteRequest(RemoteRequest &out);  // false when none is waiting
+
+struct Transfer {
+  bool active;
+  bool upload;       // phone -> board
+  char name[32];     // file name, without the folder
+  uint32_t done, total;
+};
+Transfer transfer();
 }

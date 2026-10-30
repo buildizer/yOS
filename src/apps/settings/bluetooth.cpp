@@ -2,7 +2,9 @@
 #include <functional>
 #include <memory>
 #include "apps/settings/settings.h"
+#include "os/hal.h"
 #include "os/os.h"
+#include "os/prefs.h"
 #include "os/ui.h"
 #include "services/ble.h"
 
@@ -198,6 +200,78 @@ void pairingPromptBegin() {
       default: closeAlert(&prompt); break;  // cancelled, or the stack went down
     }
   }, 250, nullptr);
+}
+
+// ---------- phone remote ----------
+// Runs what a paired phone asked for (Home, open an app, brightness, screen) on the LVGL thread, and
+// shows a small pill with the progress of a file transfer. ble queues both; this timer polls them.
+namespace {
+lv_obj_t *pill = nullptr, *pillText = nullptr, *pillBar = nullptr;
+
+void runRequest(const ble::RemoteRequest &r) {
+  switch (r.action) {
+    case ble::RA_HOME:
+      hal::wake();
+      os::goHome();
+      break;
+    case ble::RA_OPEN:
+      if (App *a = os::find(r.app)) {
+        hal::wake();
+        os::open(a);
+      }
+      break;
+    case ble::RA_BRIGHTNESS:
+      prefs::setBrightness(r.value, r.save);
+      hal::wake();
+      break;
+    case ble::RA_SCREEN:
+      if (r.value) hal::wake();
+      else hal::sleepNow();
+      break;
+  }
+}
+
+void showTransfer(const ble::Transfer &t) {
+  if (!t.active) {
+    if (pill) lv_obj_del(pill);
+    pill = nullptr;
+    return;
+  }
+  if (!pill) {
+    pill = ui::box(lv_layer_top());
+    lv_obj_set_size(pill, 280, LV_SIZE_CONTENT);
+    lv_obj_align(pill, LV_ALIGN_TOP_MID, 0, ui::STATUS_H + 6);
+    lv_obj_clear_flag(pill, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(pill, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(pill, LV_OPA_80, 0);
+    lv_obj_set_style_radius(pill, 18, 0);
+    lv_obj_set_style_pad_hor(pill, 16, 0);
+    lv_obj_set_style_pad_ver(pill, 10, 0);
+    lv_obj_set_style_pad_row(pill, 8, 0);
+    lv_obj_set_flex_flow(pill, LV_FLEX_FLOW_COLUMN);
+    pillText = ui::label(pill, "", theme::footnote, lv_color_white());
+    lv_obj_set_width(pillText, LV_PCT(100));
+    lv_label_set_long_mode(pillText, LV_LABEL_LONG_DOT);
+    pillBar = lv_bar_create(pill);
+    lv_obj_set_size(pillBar, LV_PCT(100), 4);
+    lv_obj_set_style_bg_color(pillBar, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(pillBar, LV_OPA_30, 0);
+    lv_obj_set_style_bg_color(pillBar, theme::p().blue, LV_PART_INDICATOR);
+    lv_bar_set_range(pillBar, 0, 1000);
+  }
+  uint32_t pm = t.total ? (uint64_t)t.done * 1000 / t.total : 0;
+  lv_label_set_text_fmt(pillText, ICON_BLUETOOTH "  %s %s  %lu%%", t.upload ? "Receiving" : "Sending", t.name,
+                        (unsigned long)(pm / 10));
+  lv_bar_set_value(pillBar, pm, LV_ANIM_OFF);
+}
+}  // namespace
+
+void remoteBegin() {
+  lv_timer_create([](lv_timer_t *) {
+    ble::RemoteRequest r;
+    while (ble::takeRemoteRequest(r)) runRequest(r);
+    showTransfer(ble::transfer());
+  }, 200, nullptr);
 }
 
 void bluetoothPage(lv_obj_t *appRoot) {
