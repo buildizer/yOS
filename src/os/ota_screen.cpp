@@ -103,6 +103,10 @@ void otaScreenProgress(unsigned int done, unsigned int total) {
   if (!overlay) return;
   int pct = total ? (int)((uint64_t)done * 100 / total) : 0;
   if (pct == lastPct) return;
+  // Each redraw stalls the updater for tens of ms (the screen is in PSRAM); a few per second is plenty.
+  static uint32_t lastDraw = 0;
+  if (pct < 100 && millis() - lastDraw < 200) return;
+  lastDraw = millis();
   lastPct = pct;
   hal::lock();
   lv_arc_set_value(arc, pct);

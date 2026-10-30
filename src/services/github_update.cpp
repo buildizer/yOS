@@ -10,6 +10,7 @@
 #include "config.h"
 #include "version.h"
 #include "os/ota_screen.h"
+#include "services/usb_update.h"
 
 // TLS root certificates, embedded by board_build.embed_files (tools/gen_cert_bundle.py).
 extern const uint8_t certBundle[] asm("_binary_data_x509_crt_bundle_bin_start");
@@ -261,7 +262,7 @@ void jobInstall() {
     http.end();
     return fail("The download didn't start (" + String(code) + ").");
   }
-  if (!Update.begin(size)) {
+  if (!updateBeginFast(size)) {
     http.end();
     return fail("Not enough space for the update.");
   }

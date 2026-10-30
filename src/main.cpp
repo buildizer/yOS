@@ -45,7 +45,7 @@ void setup() {
   // what can only live there: Wi-Fi/lwIP packet buffers, DMA, task stacks and the LVGL render buffers.
   // At the default 4 KB threshold, JSON parsing and UI objects starved the network stack (ENOMEM).
   heap_caps_malloc_extmem_enable(256);
-  Serial.setRxBufferSize(4096);  // USB updates stream 1 KB chunks into it
+  Serial.setRxBufferSize(4096);  // USB updates enlarge it while they run (usb_update.cpp)
   Serial.begin(115200);
   prefs::load();
   hal::begin();
