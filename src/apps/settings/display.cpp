@@ -32,6 +32,50 @@ lv_obj_t *segmented(lv_obj_t *parent, const char **opts) {
   return bm;
 }
 
+// Backlight frequency on trial: a choice the panel can't show leaves it black, so a new frequency
+// goes back to the old one after 10 s unless the person taps Keep (like a resolution change on a PC).
+static const uint32_t freqValues[] = {100, 1000, 20000, 40000};
+static lv_obj_t *freqSeg;            // the segmented control, while its page is open
+static lv_obj_t *trialAlert;         // the Keep/Revert alert, while it is up
+static lv_timer_t *trialTimer;       // pending revert
+static uint32_t trialFrom;           // the frequency to go back to
+
+static void markFreq() {
+  if (!freqSeg) return;
+  lv_btnmatrix_clear_btn_ctrl_all(freqSeg, LV_BTNMATRIX_CTRL_CHECKED);
+  for (int i = 0; i < 4; i++)
+    if (freqValues[i] == prefs::backlightFreq()) lv_btnmatrix_set_btn_ctrl(freqSeg, i, LV_BTNMATRIX_CTRL_CHECKED);
+}
+
+static void endTrial(bool keep) {
+  if (trialTimer) { lv_timer_del(trialTimer); trialTimer = nullptr; }
+  if (keep) {
+    prefs::setBacklightFreq(prefs::backlightFreq(), true);
+  } else {
+    prefs::setBacklightFreq(trialFrom, false);  // never written, so NVS still has it
+    hal::applyBacklightFreq();
+    markFreq();
+  }
+}
+
+static void tryBacklightFreq(uint32_t hz) {
+  if (!trialTimer) trialFrom = prefs::backlightFreq();
+  else lv_timer_del(trialTimer);
+  if (trialAlert) lv_obj_del(trialAlert);
+  prefs::setBacklightFreq(hz, false);
+  hal::applyBacklightFreq();
+  hal::wake();
+  ui::alert("Keep This Frequency?", "If the screen looks wrong, wait: it goes back to the previous frequency in 10 seconds.",
+            {{"Revert", ui::AlertAction::CANCEL, [] { endTrial(false); }},
+             {"Keep", ui::AlertAction::NORMAL, [] { endTrial(true); }}});
+  trialAlert = lv_obj_get_child(lv_layer_top(), -1);  // ui::alert's scrim, the newest top-layer object
+  lv_obj_add_event_cb(trialAlert, [](lv_event_t *) { trialAlert = nullptr; }, LV_EVENT_DELETE, nullptr);
+  trialTimer = lv_timer_create([](lv_timer_t *) {  // endTrial deletes the timer, so it fires once
+    endTrial(false);
+    if (trialAlert) lv_obj_del(trialAlert);
+  }, 10000, nullptr);
+}
+
 void displayPage(lv_obj_t *appRoot) {
   ui::push(appRoot, "Display & Brightness", [appRoot](lv_obj_t *c) {
       const Palette &p = theme::p();
@@ -57,7 +101,8 @@ void displayPage(lv_obj_t *appRoot) {
       wpValue = wp.value;
       lv_obj_add_event_cb(wp.obj, [](lv_event_t *) { wpValue = nullptr; }, LV_EVENT_DELETE, nullptr);
 
-      g = ui::group(c, "Brightness", "Brightness is fixed at full for now.");
+      g = ui::group(c, "Brightness", "If the screen goes dark, touch and hold anywhere for 10 seconds "
+                                       "to return to full brightness.");
       lv_obj_t *sr = ui::box(g);
       lv_obj_set_size(sr, LV_PCT(100), 56);
       lv_obj_set_style_pad_hor(sr, 16, 0);
@@ -70,9 +115,7 @@ void displayPage(lv_obj_t *appRoot) {
       lv_obj_set_height(sl, 6);
       // The slider is a percentage of the stored 10..255 level; hal maps that level through a gamma curve.
       lv_slider_set_range(sl, 4, 100);
-      lv_slider_set_value(sl, 100, LV_ANIM_OFF);
-      lv_obj_add_state(sl, LV_STATE_DISABLED);  // fixed at full for now
-      lv_obj_set_style_opa(sr, LV_OPA_40, 0);
+      lv_slider_set_value(sl, max(4, (prefs::brightness() * 100 + 127) / 255), LV_ANIM_OFF);
       lv_obj_t *pct = ui::label(sr, "", theme::footnote, p.secondary);
       lv_obj_set_width(pct, 44);
       lv_obj_set_style_text_align(pct, LV_TEXT_ALIGN_RIGHT, 0);
@@ -127,6 +170,20 @@ void displayPage(lv_obj_t *appRoot) {
       }, LV_EVENT_VALUE_CHANGED, nullptr);
       ui::note(c, "After this long without a touch the screen dims to 40%, and it turns off after 30 minutes. "
                   "It stays bright during an outage.");
+
+      g = ui::group(c, "Backlight Frequency", "Try another frequency if the screen flickers or goes dark "
+                                                "below 100% brightness. 100% lights at any frequency.");
+      lv_obj_t *freqBox = ui::box(g);
+      lv_obj_set_size(freqBox, LV_PCT(100), LV_SIZE_CONTENT);
+      lv_obj_set_style_pad_all(freqBox, 12, 0);
+      static const char *freqOpts[] = {"100 Hz", "1 kHz", "20 kHz", "40 kHz", ""};
+      freqSeg = segmented(freqBox, freqOpts);
+      markFreq();
+      lv_obj_add_event_cb(freqSeg, [](lv_event_t *) { freqSeg = nullptr; }, LV_EVENT_DELETE, nullptr);
+      lv_obj_add_event_cb(freqSeg, [](lv_event_t *e) {
+        uint16_t sel = lv_btnmatrix_get_selected_btn(lv_event_get_target(e));
+        if (sel < 4 && freqValues[sel] != prefs::backlightFreq()) tryBacklightFreq(freqValues[sel]);
+      }, LV_EVENT_VALUE_CHANGED, nullptr);
 
       g = ui::group(c, "Performance");
       ui::Row fps = ui::row(g, ICON_MOTION, p.green, "Frame Rate", "Idle", nullptr, false);

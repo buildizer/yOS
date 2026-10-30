@@ -585,10 +585,18 @@ void webStart() {
 #ifdef YOS_DEV_TOOLS
   server.on("/screenshot.bmp", handleScreenshot);
   server.on("/api/touch", handleTouch);
+  // Backlight sweep: ?freq=Hz&duty=0-100 drives the PWM raw; freq=0 hands it back to the OS.
+  // ?freq=Hz&save=1 makes Hz the OS frequency (as Settings › Display does, without the 10 s trial),
+  // optionally with &level=10-255 for the brightness, so the real curve can be checked at that frequency.
   server.on("/api/backlight", [] {
     static lv_obj_t *note = nullptr;
     uint32_t f = server.arg("freq").toInt();
     float d = server.arg("duty").toFloat();
+    if (server.arg("save") == "1") {
+      if (f) prefs::setBacklightFreq(f);
+      if (server.hasArg("level")) prefs::setBrightness(constrain(server.arg("level").toInt(), 10, 255));
+      f = 0;  // back to OS control at the saved frequency
+    }
     hal::lock();
     if (!note) {
       note = lv_label_create(lv_layer_top());
@@ -602,12 +610,16 @@ void webStart() {
     }
     if (f == 0) { lv_obj_del(note); note = nullptr; }
     else {
-      lv_label_set_text_fmt(note, "Test %s", server.arg("label").c_str());
+      if (server.hasArg("label")) lv_label_set_text_fmt(note, "Test %s", server.arg("label").c_str());
+      else lv_label_set_text_fmt(note, "%lu Hz  %.0f%%", (unsigned long)f, d);
       lv_obj_align(note, LV_ALIGN_CENTER, 0, 0);
     }
     hal::unlock();
     hal::testBacklight(f, d);
-    server.send(200, "text/plain", "ok");
+    char buf[64];
+    snprintf(buf, sizeof(buf), "ok: os freq %lu Hz, level %u", (unsigned long)prefs::backlightFreq(),
+             prefs::brightness());
+    server.send(200, "text/plain", buf);
   });
   server.on("/api/perf", [] {
     hal::Perf p = hal::takePerf();

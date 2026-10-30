@@ -10,6 +10,9 @@ Appearance appearance();
 void setAppearance(Appearance a);
 uint8_t brightness();            // 10..255
 void setBrightness(uint8_t b, bool persist = true);  // persist=false: apply only (e.g. while dragging)
+// Backlight PWM frequency in Hz. Panels differ: some dim only at 20 kHz+, others only at ~100 Hz.
+uint32_t backlightFreq();        // 50..40000, default 20000
+void setBacklightFreq(uint32_t hz, bool persist = true);  // persist=false: on trial, until the person keeps it
 uint8_t dimAfterMin();           // 0 = never dim
 void setDimAfterMin(uint8_t m);
 uint8_t rotation();              // 0..3 = 0, 90, 180, 270 degrees
