@@ -25,16 +25,18 @@ struct Tile {
   lv_obj_t *tile, *glyph, *dot;   // dot is null in the All Apps grid
 };
 static std::vector<Tile> tiles;      // the dock
-static std::vector<Tile> libTiles;   // the All Apps grid, while it is open
+static std::vector<Tile> libTiles;   // the All Apps grid
 static lv_obj_t *homeClock = nullptr, *homeAmPm = nullptr, *homeDate = nullptr, *homeWx = nullptr;
 
-// All Apps: a full-screen page that rises over the dimmed Home Screen.
-enum LibClose { LIB_ANIMATE, LIB_LINGER, LIB_NOW };
-static lv_obj_t *libRoot = nullptr, *libPage = nullptr, *libGrid = nullptr, *libSearchText = nullptr,
-                *libSearchClear = nullptr;
+// The Home Screen is two pages side by side in a horizontal pager over the wallpaper: the Glance
+// page with the dock, and All Apps. A swipe or a tap on the page dots moves between them.
+static const int HOME_PAGES = 2;
+static lv_obj_t *pager = nullptr;
+static int homePage = 0;  // 0 = Home Screen, 1 = All Apps; kept across rebuilds
+static lv_obj_t *libGrid = nullptr, *libSearchText = nullptr, *libSearchClear = nullptr;
+static lv_obj_t *searchRoot = nullptr;  // the search text entry, over the Home Screen
 static String libFilter;
-static void closeLibrary(LibClose how);
-static void rebuildLibrary();
+static void closeSearch();
 static void closeMenu();
 static void animOpa(void *o, int32_t v) { lv_obj_set_style_opa((lv_obj_t *)o, v, 0); }
 static void animY(void *o, int32_t v) { lv_obj_set_y((lv_obj_t *)o, v); }
@@ -81,10 +83,7 @@ void unregisterApp(App *app) {
   registry.erase(std::remove(registry.begin(), registry.end(), app), registry.end());
 }
 static void buildHome();
-void rebuildHome() {
-  buildHome();
-  rebuildLibrary();
-}
+void rebuildHome() { buildHome(); }
 const std::vector<App *> &apps() { return registry; }
 App *current() { return openApp; }
 App *find(const char *id) {
@@ -119,7 +118,6 @@ void refreshAppearance() {
   theme::apply(dark);
   buildStatusBar();
   buildHome();
-  rebuildLibrary();
   if (openApp) {
     // Rebuild the open app in the new colours, back at its first page.
     App *a = openApp;
@@ -133,8 +131,11 @@ void refreshAppearance() {
 // ---------- status bar ----------
 
 static void updateStatusBar() {
+  if (!statusBar) return;
   const Palette &p = theme::p();
-  lv_color_t fg = openApp ? p.label : libRoot ? lv_color_white() : p.homeLabel;  // All Apps is always dark
+  bool inPage = openApp || searchRoot;           // an opaque page in the theme's colours
+  bool onApps = !inPage && homePage == 1;
+  lv_color_t fg = inPage ? p.label : onApps ? lv_color_white() : p.homeLabel;  // All Apps is always dark
   time_t now = time(nullptr);
   char buf[16] = "--:--";
   if (now > 1000000000) {
@@ -155,16 +156,17 @@ static void updateStatusBar() {
   // The provider only keeps the screen bright during an outage; Netwatch's icon shows the state.
   if (statusFn) hal::setAlarm(statusFn().level == STATUS_ALERT);
   // In an app the bar is opaque in the page colour so scrolled content never shows behind it.
-  int want = openApp ? (int)lv_color_to32(p.background) : -1;  // -1: transparent over the wallpaper
+  int want = inPage ? (int)lv_color_to32(p.background) : -1;  // -1: transparent over the wallpaper
   if (want != barState) {
     barState = want;
     lv_obj_set_style_bg_color(statusBar, p.background, 0);
-    lv_obj_set_style_bg_opa(statusBar, openApp ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+    lv_obj_set_style_bg_opa(statusBar, inPage ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
   }
   if (homeIndicator) {
-    lv_obj_set_style_bg_color(homeIndicator, p.label, 0);
-    if (openApp) lv_obj_clear_flag(homeIndicator, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(homeIndicator, LV_OBJ_FLAG_HIDDEN);
+    // Under the dock on the Home Screen too (Main design); All Apps has its page dots there instead.
+    lv_obj_set_style_bg_color(homeIndicator, inPage ? p.label : p.homeLabel, 0);
+    if (onApps) lv_obj_add_flag(homeIndicator, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_clear_flag(homeIndicator, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
@@ -195,7 +197,7 @@ static void buildStatusBar() {
 // ---------- home screen ----------
 
 static void showMenu(App *app, lv_obj_t *cell, int tileSize, int tileRadius);
-static void openLibrary(bool animate);
+static void buildAllAppsPage(lv_obj_t *page);
 
 static void showIf(lv_obj_t *o, bool shown) {
   if (shown) lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
@@ -299,14 +301,73 @@ static void wireApp(lv_obj_t *cell, App *app, int ts, int radius) {
   lv_obj_add_event_cb(cell, [](lv_event_t *e) { delete (Ctx *)lv_event_get_user_data(e); }, LV_EVENT_DELETE, ctx);
 }
 
+// The dock's apps: the saved order, or the default five. Hidden, missing and repeated ids are skipped.
+static const char *const DEFAULT_DOCK = "netwatch,clock,weather,files,settings";
+static const size_t DOCK_MAX = 5;
+
+static std::vector<App *> dockList() {
+  String ids = prefs::dockApps();
+  if (ids.isEmpty()) ids = DEFAULT_DOCK;
+  std::vector<App *> list;
+  int from = 0, len = ids.length();
+  while (from <= len && list.size() < DOCK_MAX) {
+    int comma = ids.indexOf(',', from);
+    if (comma < 0) comma = len;
+    String id = ids.substring(from, comma);
+    id.trim();
+    from = comma + 1;
+    App *a = id.isEmpty() ? nullptr : find(id.c_str());
+    if (a && !prefs::appHidden(a->id()) && std::find(list.begin(), list.end(), a) == list.end()) list.push_back(a);
+  }
+  return list;
+}
+
+// Scroll the Home Screen pager to a page (instantly with Reduce Motion).
+static void showPage(int page, bool animate) {
+  if (!pager) return;
+  bool anim = animate && !prefs::reduceMotion();
+  lv_obj_scroll_to_x(pager, page * 480, anim ? LV_ANIM_ON : LV_ANIM_OFF);
+  if (!anim && page != homePage) {
+    homePage = page;
+    updateStatusBar();
+  }
+}
+
+// Page dots: the current page solid, the others 40 % with a 24 px tap target that goes to them.
+// bottom is the gap under the 24 px row; dot centres are 26 px apart, as in the design.
+static void pageDots(lv_obj_t *page, int current, int bottom, lv_color_t color) {
+  lv_obj_t *row = ui::box(page);
+  lv_obj_set_size(row, LV_SIZE_CONTENT, 24);
+  lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_column(row, 2, 0);
+  for (int i = 0; i < HOME_PAGES; i++) {
+    lv_obj_t *hit = ui::box(row);
+    lv_obj_set_size(hit, 24, 24);
+    lv_obj_t *dot = ui::box(hit);
+    lv_obj_set_size(dot, 8, 8);
+    lv_obj_center(dot);
+    lv_obj_set_style_radius(dot, 4, 0);
+    lv_obj_set_style_bg_color(dot, color, 0);
+    lv_obj_set_style_bg_opa(dot, i == current ? LV_OPA_COVER : LV_OPA_40, 0);
+    if (i == current) continue;
+    lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(hit, [](lv_event_t *e) { showPage((int)(intptr_t)lv_event_get_user_data(e), true); },
+                        LV_EVENT_CLICKED, (void *)(intptr_t)i);
+  }
+  lv_obj_align(row, LV_ALIGN_BOTTOM_MID, 0, -bottom);
+}
+
 static void buildHome() {
   const Palette &p = theme::p();
   if (home) lv_obj_del(home);
   tiles.clear();
+  libTiles.clear();
   home = ui::box(lv_scr_act());
   lv_obj_set_size(home, 480, 480);
   lv_obj_move_background(home);
   // A custom SD wallpaper (cached in PSRAM, scrim already baked in) or the built-in gradient strip.
+  // It stays put under the pager; only the pages move.
   const lv_img_dsc_t *custom = wallpaper::image();
   lv_obj_t *wp = lv_img_create(home);
   if (custom) {
@@ -328,8 +389,28 @@ static void buildHome() {
     }
   }
 
+  // Pager: snaps one page per swipe. Clickable so a drag anywhere (even between icons) swipes.
+  pager = ui::box(home);
+  lv_obj_set_size(pager, 480, 480);
+  lv_obj_add_flag(pager, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLL_ONE);
+  lv_obj_set_scroll_dir(pager, LV_DIR_HOR);
+  lv_obj_set_scroll_snap_x(pager, LV_SCROLL_SNAP_START);
+  lv_obj_set_scrollbar_mode(pager, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_add_event_cb(pager, [](lv_event_t *) {
+    // The status bar turns white as soon as All Apps is more than half in view.
+    int page = constrain((lv_obj_get_scroll_x(pager) + 240) / 480, 0, HOME_PAGES - 1);
+    if (page == homePage) return;
+    homePage = page;
+    updateStatusBar();
+  }, LV_EVENT_SCROLL, nullptr);
+  lv_obj_t *glance = ui::box(pager);
+  lv_obj_set_size(glance, 480, 480);
+  lv_obj_t *library = ui::box(pager);
+  lv_obj_set_size(library, 480, 480);
+  lv_obj_set_pos(library, 480, 0);
+
   // Glance: big clock, date, weather.
-  lv_obj_t *col = ui::box(home);
+  lv_obj_t *col = ui::box(glance);
   lv_obj_set_size(col, 424, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(col, 4, 0);
@@ -352,7 +433,7 @@ static void buildHome() {
 
   // Rotation widget: one tap turns the screen a quarter turn (Settings › Display has the full control).
   if (prefs::rotationWidget()) {
-    lv_obj_t *w = ui::box(home);
+    lv_obj_t *w = ui::box(glance);
     lv_obj_set_size(w, 150, 92);
     lv_obj_set_pos(w, 28, 236);
     lv_obj_set_style_radius(w, 20, 0);
@@ -382,45 +463,45 @@ static void buildHome() {
     }, LV_EVENT_CLICKED, nullptr);
   }
 
-  // Dock: Netwatch, Clock, Weather, Files, All Apps, Settings.
-  lv_obj_t *dock = ui::box(home);
-  lv_obj_set_size(dock, 448, 112);
-  lv_obj_set_pos(dock, 16, 480 - 22 - 112);
-  lv_obj_set_style_radius(dock, 28, 0);
-  lv_obj_set_style_bg_color(dock, p.dark ? lv_color_hex(0x141828) : lv_color_white(), 0);
-  lv_obj_set_style_bg_opa(dock, p.dark ? LV_OPA_50 + 12 : LV_OPA_70 + 4, 0);  // ~55 % dark, ~72 % light
-  lv_obj_set_style_border_width(dock, 1, 0);
-  lv_obj_set_style_border_color(dock, lv_color_white(), 0);
-  lv_obj_set_style_border_opa(dock, p.dark ? LV_OPA_10 + 2 : LV_OPA_60, 0);
-  lv_obj_set_style_pad_hor(dock, 4, 0);
-  lv_obj_set_flex_flow(dock, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(dock, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  pageDots(glance, 0, 142, p.homeLabel);
 
-  static const char *const slots[] = {"netwatch", "clock", "weather", "files", nullptr, "settings"};
-  for (const char *id : slots) {
-    lv_obj_t *tile, *glyph, *cell;
-    if (!id) {
-      cell = buildCell(dock, 72, 56, 14, "All Apps", ICON_APPS, lv_color_white(), LV_OPA_20 + 2, p.homeLabel, &tile,
-                       &glyph);
-      if (!p.dark) lv_obj_set_style_bg_color(tile, lv_color_hex(0x636366), 0), lv_obj_set_style_bg_opa(tile, LV_OPA_50, 0);
-      lv_obj_add_event_cb(cell, [](lv_event_t *) { openLibrary(true); }, LV_EVENT_SHORT_CLICKED, nullptr);
-      continue;
+  // Dock: up to five apps (prefs::dockApps), centred in five equal columns.
+  std::vector<App *> docked = dockList();
+  if (!docked.empty()) {
+    lv_obj_t *dock = ui::box(glance);
+    lv_obj_set_size(dock, 448, 112);
+    lv_obj_set_pos(dock, 16, 480 - 22 - 112);
+    lv_obj_set_style_radius(dock, 28, 0);
+    lv_obj_set_style_bg_color(dock, p.dark ? lv_color_hex(0x141828) : lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(dock, p.dark ? LV_OPA_50 + 12 : LV_OPA_70 + 4, 0);  // ~55 % dark, ~72 % light
+    lv_obj_set_style_border_width(dock, 1, 0);
+    lv_obj_set_style_border_color(dock, lv_color_white(), 0);
+    lv_obj_set_style_border_opa(dock, p.dark ? LV_OPA_10 + 2 : LV_OPA_60, 0);
+    lv_obj_set_style_pad_hor(dock, 6, 0);
+    lv_obj_set_flex_flow(dock, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(dock, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    for (App *app : docked) {
+      lv_obj_t *tile, *glyph;
+      lv_obj_t *cell = buildCell(dock, 87, 56, 14, app->name(), app->icon(), app->tint(), LV_OPA_COVER, p.homeLabel,
+                                 &tile, &glyph);
+      lv_obj_set_style_pad_row(cell, 7, 0);
+      lv_obj_set_style_pad_bottom(cell, 8, 0);
+      lv_obj_t *dot = ui::box(cell);  // running indicator, kept small and quiet under the label
+      lv_obj_add_flag(dot, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_FLOATING);
+      lv_obj_set_size(dot, 4, 4);
+      lv_obj_align(dot, LV_ALIGN_BOTTOM_MID, 0, 6);
+      lv_obj_set_style_radius(dot, 2, 0);
+      lv_obj_set_style_bg_opa(dot, LV_OPA_60, 0);
+      tiles.push_back({app, tile, glyph, dot});
+      wireApp(cell, app, 56, 14);
     }
-    App *app = find(id);
-    if (!app) continue;
-    cell = buildCell(dock, 72, 56, 14, app->name(), app->icon(), app->tint(), LV_OPA_COVER, p.homeLabel, &tile,
-                     &glyph);
-    lv_obj_set_style_pad_bottom(cell, 8, 0);
-    lv_obj_t *dot = ui::box(cell);  // running indicator, kept small and quiet under the label
-    lv_obj_add_flag(dot, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_FLOATING);
-    lv_obj_set_size(dot, 4, 4);
-    lv_obj_align(dot, LV_ALIGN_BOTTOM_MID, 0, 6);
-    lv_obj_set_style_radius(dot, 2, 0);
-    lv_obj_set_style_bg_opa(dot, LV_OPA_60, 0);
-    tiles.push_back({app, tile, glyph, dot});
-    wireApp(cell, app, 56, 14);
   }
+
+  buildAllAppsPage(library);
   refreshTiles();
+  // Back on the page that was showing (a rebuild after a theme or app list change).
+  lv_obj_update_layout(pager);
+  lv_obj_scroll_to_x(pager, homePage * 480, LV_ANIM_OFF);
 }
 
 // ---------- All Apps ----------
@@ -435,6 +516,7 @@ static bool containsNoCase(const char *hay, const String &needle) {
 }
 
 static void fillLibraryGrid() {
+  if (!libGrid) return;
   libTiles.clear();
   lv_obj_clean(libGrid);
   lv_obj_scroll_to_y(libGrid, 0, LV_ANIM_OFF);
@@ -443,12 +525,13 @@ static void fillLibraryGrid() {
   for (int pass = 0; pass < 2; pass++) {
     std::vector<App *> list;
     for (App *a : registry)
-      if (a->removable() == (pass == 1) && containsNoCase(a->name(), libFilter)) list.push_back(a);
+      if (a->removable() == (pass == 1) && !prefs::appHidden(a->id()) && containsNoCase(a->name(), libFilter))
+        list.push_back(a);
     if (list.empty()) continue;
-    shown += list.size();
     lv_obj_t *head = ui::label(libGrid, pass ? "INSTALLED \xC2\xB7 ON SD CARD" : "BUILT IN", theme::caption, white);
-    lv_obj_set_style_text_opa(head, LV_OPA_70, 0);
-    lv_obj_set_style_text_letter_space(head, 1, 0);
+    lv_obj_set_style_text_opa(head, LV_OPA_70 + 6, 0);  // ~72 %
+    if (shown) lv_obj_set_style_pad_top(head, 6, 0);
+    shown += list.size();
     lv_obj_t *grid = ui::box(libGrid);
     lv_obj_set_size(grid, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
@@ -469,50 +552,72 @@ static void fillLibraryGrid() {
 }
 
 static void updateSearchField() {
+  if (!libSearchText) return;
   bool has = !libFilter.isEmpty();
   lv_label_set_text(libSearchText, has ? libFilter.c_str() : "Search");
   lv_obj_set_style_text_opa(libSearchText, has ? LV_OPA_COVER : LV_OPA_60, 0);
   showIf(libSearchClear, has);
 }
 
-static void buildLibraryPage(lv_obj_t *page) {
-  libPage = page;
+// Search: the full-page text entry on its own root over the Home Screen. The page stack needs a root
+// page under the entry, so an empty transparent one goes first; the entry slides in over All Apps.
+static void openSearch() {
+  if (searchRoot || openApp) return;
+  closeMenu();
+  hal::wake();
+  searchRoot = ui::box(lv_scr_act());
+  lv_obj_set_size(searchRoot, 480, 480);
+  ui::resetStack();
+  lv_obj_t *base = ui::push(searchRoot, "", [](lv_obj_t *) {});
+  lv_obj_set_style_bg_opa(base, LV_OPA_TRANSP, 0);
+  ui::textInput(searchRoot, "Search", "Search apps", libFilter.c_str(), false, [](const String &t) {
+    libFilter = t;
+    libFilter.trim();
+    updateSearchField();
+    fillLibraryGrid();
+  });
+  // Done, Cancel and the back swipe all pop the entry; once it is gone, so is the search root.
+  lv_obj_add_event_cb(ui::currentPage(), [](lv_event_t *e) {
+    if (searchRoot == lv_event_get_user_data(e)) closeSearch();
+  }, LV_EVENT_DELETE, searchRoot);
+  updateStatusBar();
+}
+
+static void closeSearch() {
+  if (!searchRoot) return;
+  lv_obj_del_async(searchRoot);
+  searchRoot = nullptr;
+  ui::resetStack();
+  updateStatusBar();
+}
+
+// All Apps: the second Home Screen page, over a dark scrim (always dark, like the design).
+static void buildAllAppsPage(lv_obj_t *page) {
   lv_color_t white = lv_color_white();
-  // Dimmed wallpaper behind: the page itself is the scrim.
   lv_obj_set_style_bg_color(page, lv_color_hex(0x060A14), 0);
   lv_obj_set_style_bg_opa(page, LV_OPA_70 + 4, 0);  // ~72 %
-  lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_pad_hor(page, 20, 0);
-  lv_obj_set_style_pad_bottom(page, 24, 0);
-  lv_obj_set_style_pad_row(page, 10, 0);
-  lv_obj_set_style_text_color(lv_obj_get_child(page, 0), white, 0);  // the large title
 
-  lv_obj_t *done = ui::box(page);
-  lv_obj_add_flag(done, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_FLOATING | LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_size(done, 72, 44);
-  lv_obj_align(done, LV_ALIGN_TOP_RIGHT, 0, 10);
-  lv_obj_set_style_opa(done, LV_OPA_50, LV_STATE_PRESSED);
-  lv_obj_t *dl = ui::label(done, "Done", theme::bodyBold, white);
-  lv_obj_align(dl, LV_ALIGN_RIGHT_MID, 0, 0);
-  lv_obj_add_event_cb(done, [](lv_event_t *) { closeLibrary(LIB_ANIMATE); }, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *title = ui::label(page, "All Apps", theme::largeTitle, white);
+  lv_obj_set_pos(title, 20, 40 + (44 - lv_font_get_line_height(theme::largeTitle)) / 2);
 
   // Search field: tapping it opens the full-page text entry; the grid filters by name.
   lv_obj_t *field = ui::box(page);
-  lv_obj_set_size(field, LV_PCT(100), 44);
+  lv_obj_set_size(field, 440, 44);
+  lv_obj_set_pos(field, 20, 92);
   lv_obj_set_style_radius(field, 12, 0);
   lv_obj_set_style_bg_color(field, white, 0);
-  lv_obj_set_style_bg_opa(field, LV_OPA_20 - 2, 0);
-  lv_obj_set_style_pad_hor(field, 14, 0);
+  lv_obj_set_style_bg_opa(field, LV_OPA_10 + 10, 0);  // ~14 %
+  lv_obj_set_style_pad_hor(field, 12, 0);
   lv_obj_add_flag(field, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_opa(field, LV_OPA_70, LV_STATE_PRESSED);
   libSearchText = ui::label(field, "Search", theme::body, white);
-  lv_obj_set_width(libSearchText, 340);
+  lv_obj_set_width(libSearchText, 350);
   lv_label_set_long_mode(libSearchText, LV_LABEL_LONG_DOT);
   lv_obj_align(libSearchText, LV_ALIGN_LEFT_MID, 0, 0);
   libSearchClear = ui::box(field);
   lv_obj_add_flag(libSearchClear, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_size(libSearchClear, 44, 44);
-  lv_obj_align(libSearchClear, LV_ALIGN_RIGHT_MID, 14, 0);
+  lv_obj_align(libSearchClear, LV_ALIGN_RIGHT_MID, 12, 0);
   lv_obj_t *x = ui::label(libSearchClear, ICON_BACKSPACE, theme::body, white);
   lv_obj_center(x);
   lv_obj_add_event_cb(libSearchClear, [](lv_event_t *) {
@@ -520,84 +625,23 @@ static void buildLibraryPage(lv_obj_t *page) {
     updateSearchField();
     fillLibraryGrid();
   }, LV_EVENT_CLICKED, nullptr);
-  lv_obj_add_event_cb(field, [](lv_event_t *) {
-    ui::textInput(libRoot, "Search", "Search apps", libFilter.c_str(), false, [](const String &t) {
-      libFilter = t;
-      libFilter.trim();
-      if (!libGrid) return;
-      updateSearchField();
-      fillLibraryGrid();
-    });
-  }, LV_EVENT_CLICKED, nullptr);
+  lv_obj_add_event_cb(field, [](lv_event_t *) { openSearch(); }, LV_EVENT_CLICKED, nullptr);
 
+  // The grid scrolls up and down; sideways drags chain to the pager. Clickable so drags between
+  // icons scroll too.
   libGrid = ui::box(page);
-  lv_obj_set_size(libGrid, LV_PCT(100), 304);
-  lv_obj_add_flag(libGrid, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_size(libGrid, 440, 480 - 152 - 48);
+  lv_obj_set_pos(libGrid, 20, 152);
+  lv_obj_add_flag(libGrid, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_scroll_dir(libGrid, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(libGrid, LV_SCROLLBAR_MODE_OFF);
   lv_obj_set_flex_flow(libGrid, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(libGrid, 10, 0);
   updateSearchField();
   fillLibraryGrid();
+
+  pageDots(page, 1, 14, white);
 }
-
-static void animateRoot(lv_obj_t *root, bool in, void (*done)(lv_anim_t *)) {
-  lv_anim_t a;
-  lv_anim_init(&a);
-  lv_anim_set_var(&a, root);
-  if (prefs::reduceMotion()) {
-    lv_anim_set_exec_cb(&a, animOpa);
-    lv_anim_set_values(&a, in ? 0 : 255, in ? 255 : 0);
-    lv_anim_set_time(&a, 120);
-  } else {
-    lv_anim_set_exec_cb(&a, animY);
-    lv_anim_set_values(&a, in ? 480 : 0, in ? 0 : 480);
-    lv_anim_set_time(&a, in ? 300 : 260);
-    lv_anim_set_path_cb(&a, in ? lv_anim_path_ease_out : lv_anim_path_ease_in);
-  }
-  if (done) lv_anim_set_ready_cb(&a, done);
-  lv_anim_start(&a);
-}
-
-static void openLibrary(bool animate) {
-  if (libRoot || openApp) return;
-  closeMenu();
-  hal::wake();
-  libRoot = ui::box(lv_scr_act());
-  lv_obj_set_size(libRoot, 480, 480);
-  ui::resetStack();
-  ui::push(libRoot, "All Apps", buildLibraryPage);
-  if (animate) animateRoot(libRoot, true, nullptr);
-  updateStatusBar();
-}
-
-static void closeLibrary(LibClose how) {
-  if (!libRoot) return;
-  closeMenu();
-  libTiles.clear();
-  libGrid = libPage = libSearchText = libSearchClear = nullptr;
-  ui::resetStack();
-  lv_obj_t *root = libRoot;
-  libRoot = nullptr;
-  if (how == LIB_NOW) {
-    lv_obj_del(root);
-  } else if (how == LIB_LINGER) {
-    // An app is opening over it: keep it underneath until the app has risen.
-    lv_timer_t *t = lv_timer_create([](lv_timer_t *t) { lv_obj_del_async((lv_obj_t *)t->user_data); }, 400, root);
-    lv_timer_set_repeat_count(t, 1);
-  } else {
-    animateRoot(root, false, [](lv_anim_t *an) { lv_obj_del_async((lv_obj_t *)an->var); });
-  }
-  updateStatusBar();
-}
-
-static void rebuildLibrary() {
-  if (!libRoot || ui::currentPage() != libPage) return;  // a text entry is open on top: leave it
-  closeLibrary(LIB_NOW);
-  openLibrary(false);
-}
-
-
 // ---------- long-press menu ----------
 
 static lv_obj_t *menuScrim = nullptr;
@@ -701,7 +745,7 @@ void stop(App *app) {
 void open(App *app) {
   closeMenu();
   if (openApp == app) return;
-  closeLibrary(LIB_LINGER);
+  closeSearch();  // All Apps itself stays where it is, under the app, for when it closes
   if (openApp) {
     openApp->close();
     ui::resetStack();
@@ -736,7 +780,9 @@ void open(App *app) {
 void goHome() {
   closeMenu();
   if (!openApp) {
-    closeLibrary(LIB_ANIMATE);
+    // On the Home Screen: close the search, else go back to the first page.
+    if (searchRoot) closeSearch();
+    else showPage(0, true);
     return;
   }
   openApp->close();
@@ -833,7 +879,7 @@ void loop() {
   hal::loop();
   switch (hal::takeGesture()) {
     case GESTURE_HOME: goHome(); break;
-    case GESTURE_BACK: if (openApp || libRoot) ui::pop(); break;
+    case GESTURE_BACK: if (openApp || searchRoot) ui::pop(); break;
     default: break;
   }
   uint32_t now = millis();
