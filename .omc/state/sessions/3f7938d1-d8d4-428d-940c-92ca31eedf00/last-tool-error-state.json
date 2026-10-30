@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"PY=$(ls ~/.platformio/penv/bin/python /opt/homebrew/opt/platformio/libexec/bin/python 2>/dev/null | head -1); cd /private/tmp/claude-501/-Users-youssefhanna/3f7938d1-d8d4-428d-940c-92ca31e...",
+  "error": "Exit code 137\n== clean\nLine speed 115200 baud\n\nSent in 0.1 s. Writing to flash on the board…\nVerified. yOS is restarting (0.1 s, 3 retries).\nsim exit 0\n== noisy\nSending 1423 KB (compressed from 2250 KB), protocol 2\nLine speed 115200 baud\n\nToo many transfer errors. Check the cable, or use recovery (option 3).\n\n[killed]",
+  "timestamp": "2026-10-29T17:48:01.865Z",
+  "retry_count": 1
+}

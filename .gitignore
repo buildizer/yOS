@@ -1,6 +1,5 @@
 .pio/
 .venv/
-.omc/
 screenshots/
 *.bmp
 wallpapers/*.rgb565
