@@ -6,9 +6,11 @@
 // to internal flash while it keeps 256 KB free after the install, otherwise to the SD card.
 //
 // Threads: loadScriptApps() runs before os::begin(). The other functions are for the web server
-// task; they take hal::lock() themselves around anything that touches the app registry or LVGL,
-// and never hold it while waiting for the SD card lock.
+// task (and the App Store's download task); they take hal::lock() themselves around anything that
+// touches the app registry or LVGL, and never hold it while waiting for the SD card lock.
+// scriptAppLook() touches nothing and is safe anywhere.
 #include <Arduino.h>
+#include <lvgl.h>
 #include <string>
 #include <vector>
 
@@ -32,3 +34,7 @@ bool scriptAppRemove(const char *id, String &err);
 
 // Free space for new apps (bytes), for the web page.
 uint64_t scriptInternalFree();
+
+// The Home Screen glyph (ICON_*) and tile colour an app.json with this "icon" name and "#RRGGBB"
+// "color" gets, so the App Store can draw apps that aren't installed yet the way they will look.
+void scriptAppLook(const char *icon, const char *color, const char *&glyph, lv_color_t &tint);

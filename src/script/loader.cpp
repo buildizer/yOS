@@ -2,6 +2,7 @@
 #include "script/loader.h"
 #include <LittleFS.h>
 #include <SD.h>
+#include <ArduinoJson.h>
 #include "os/hal.h"
 #include "os/os.h"
 #include "script/script_app.h"
@@ -279,4 +280,20 @@ bool scriptAppInstall(const std::vector<ScriptAppFile> &files, String &err, Scri
   Serial.printf("[apps] installed %s (%s) on %s\n", m.name.c_str(), m.id.c_str(), loc == SDCARD ? "SD card" : "internal flash");
   if (result) *result = {m.id, m.name, m.version, loc == SDCARD, app->bytes};
   return true;
+}
+
+void scriptAppLook(const char *icon, const char *color, const char *&glyph, lv_color_t &tint) {
+  // Same rules as an installed app's manifest, so a store listing and the installed tile agree.
+  JsonDocument doc;
+  doc["id"] = "look";
+  doc["name"] = "look";
+  doc["icon"] = icon && *icon ? icon : "extension";
+  if (color && *color) doc["color"] = color;
+  std::string json;
+  serializeJson(doc, json);
+  Manifest m;
+  String err;
+  parseManifest(json, m, err);
+  glyph = m.glyph;
+  tint = m.color;
 }

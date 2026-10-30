@@ -7,6 +7,12 @@
 #define GITHUB_REPO          "buildizer/yOS"
 #define GITHUB_APP_CLIENT_ID ""
 #define GITHUB_FW_ASSET      "firmware.bin"
+// The App Store's catalog: store/index.json and one folder per app, on this branch of GITHUB_REPO.
+// When the board is signed in to GitHub (above) it reads them through the contents API with that
+// token, which works for a private repo; signed out it uses STORE_BASE_URL, which needs a public repo.
+#define STORE_BRANCH         "main"
+#define STORE_DIR            "store"
+#define STORE_BASE_URL       "https://raw.githubusercontent.com/" GITHUB_REPO "/" STORE_BRANCH "/" STORE_DIR
 
 #define TZ_INFO         "EET-2EEST,M4.5.5/0,M10.5.4/24"  // Africa/Cairo
 

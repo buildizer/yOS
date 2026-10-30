@@ -5,3 +5,4 @@ App *createClockApp();
 App *createWeatherApp();
 App *createFilesApp();
 App *createSettingsApp();
+App *createStoreApp();

@@ -86,6 +86,7 @@ void setup() {
   os::registerApp(createClockApp());
   os::registerApp(createWeatherApp());
   os::registerApp(createFilesApp());
+  os::registerApp(createStoreApp());
   os::registerApp(createSettingsApp());
   loadScriptApps();
   os::begin();

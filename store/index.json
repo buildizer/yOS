@@ -1,0 +1,53 @@
+{
+  "featured": "focus",
+  "apps": [
+    {
+      "id": "focus",
+      "name": "Focus",
+      "icon": "clock",
+      "color": "#BF5AF2",
+      "version": "1.0",
+      "summary": "Pomodoro work and break timer",
+      "description": "Work in 25-minute sessions with a 5-minute break in between. Start, pause or skip a phase, and keep count of the sessions you finish. The count survives restarts.",
+      "notes": "First release.",
+      "size": 2275,
+      "files": [
+        "app.json",
+        "main.lua"
+      ],
+      "requires": "1.2"
+    },
+    {
+      "id": "dice",
+      "name": "Dice",
+      "icon": "apps",
+      "color": "#5E5CE6",
+      "version": "1.0",
+      "summary": "Roll one to four dice",
+      "description": "Roll up to four six-sided dice with one tap and see the total. Tap Dice to choose how many; it remembers your choice.",
+      "notes": "First release.",
+      "size": 922,
+      "files": [
+        "app.json",
+        "main.lua"
+      ],
+      "requires": "1.2"
+    },
+    {
+      "id": "tally",
+      "name": "Tally",
+      "icon": "add",
+      "color": "#30D158",
+      "version": "1.0",
+      "summary": "Count anything with a tap",
+      "description": "A counter for laps, visitors, cups of coffee or anything else. Choose how much each tap adds, take one back with -1, and reset when you're done. The count survives restarts.",
+      "notes": "First release.",
+      "size": 1592,
+      "files": [
+        "app.json",
+        "main.lua"
+      ],
+      "requires": "1.2"
+    }
+  ]
+}
