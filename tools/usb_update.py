@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Send a firmware image to a running yOS over the USB cable (see src/services/usb_update.cpp).
 
-usage: usb_update.py firmware.bin /dev/cu.usbserial-XXX [baud] [--raw]
+usage: usb_update.py firmware.bin.gz|firmware.bin /dev/cu.usbserial-XXX [baud] [--raw]
 Exit code 3 means yOS didn't answer (no firmware with USB update support running): use recovery.
 
 Boards with protocol 2 take the whole image into memory at 1 Mbaud with 16 chunks in flight, then
 write flash. Older boards get the original stop-and-wait transfer at 921600. If 1 Mbaud turns out to
 be unreliable on this cable, the transfer is cancelled and restarted at 921600 automatically.
+Protocol 3 boards take firmware.bin.gz as built; older ones get the same image as a zlib stream.
 """
-import hashlib, struct, sys, time, zlib
+import gzip, hashlib, struct, sys, time, zlib
 import serial
 
 CHUNK = 1024
@@ -127,6 +128,8 @@ def transfer(s, raw, image, md5, baud, compressed, proto, fallback=False):
             print(f"\nSent in {sent_at - start:.1f} s. Writing to flash on the board…", flush=True)
         elif line.startswith('STATS '):
             print("  " + line[6:])
+        elif line.startswith('[fwupdate]'):
+            print("  " + line[11:])
         elif line == 'DONE':
             print(f"Verified. yOS is restarting ({time.time() - start:.1f} s, {retries} retries).")
             return
@@ -141,12 +144,20 @@ def main():
     raw_mode = '--raw' in sys.argv  # for boards running firmware from before compressed transfers
     args = [a for a in sys.argv[1:] if a != '--raw']
     path, port = args[0], args[1]
-    raw = open(path, 'rb').read()
+    data = open(path, 'rb').read()
+    is_gz = data[:2] == b'\x1f\x8b'
+    raw = gzip.decompress(data) if is_gz else data
     md5 = hashlib.md5(raw).hexdigest()
-    image = raw if raw_mode else zlib.compress(raw, 9)  # what travels; yOS inflates it with the ROM decompressor
 
     s = open_port(port)
     proto = protocol(s)
+    # What travels; yOS inflates it with the ROM decompressor. gzip from protocol 3 on, else zlib.
+    if raw_mode:
+        image = raw
+    elif is_gz and proto >= 3:
+        image = data
+    else:
+        image = zlib.compress(raw, 9)
     if len(args) > 2:
         speeds = [int(args[2])]
     else:

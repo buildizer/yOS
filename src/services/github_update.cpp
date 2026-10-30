@@ -4,13 +4,12 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
-#include <Update.h>
 #include <mbedtls/sha256.h>
 #include <mutex>
 #include "config.h"
 #include "version.h"
 #include "os/ota_screen.h"
-#include "services/usb_update.h"
+#include "services/firmware_update.h"
 
 // TLS root certificates, embedded by board_build.embed_files (tools/gen_cert_bundle.py).
 extern const uint8_t certBundle[] asm("_binary_data_x509_crt_bundle_bin_start");
@@ -30,8 +29,9 @@ volatile bool cancelWanted = false;
 uint32_t session = 0, jobSession = 0;
 TaskHandle_t worker = nullptr;
 uint32_t lastAutoAttemptMs = 0;
-String assetId;             // AVAILABLE: the firmware asset to download
+String assetId;             // AVAILABLE: the firmware asset to download (firmware.bin.gz when the release has it)
 String assetSha256;         // its digest from GitHub, when given ("" = rely on the image's own check)
+bool assetGz = false;       // the asset is gzip-compressed (inflated on the board while it downloads)
 
 const char *API = "https://api.github.com";
 
@@ -138,10 +138,14 @@ void jobCheck() {
 
   String tag = doc["tag_name"] | "";
   String latest = tag.startsWith("v") || tag.startsWith("V") ? tag.substring(1) : tag;
-  JsonObject asset;
+  // Releases carry firmware.bin and, since 1.3, firmware.bin.gz: a third smaller, so a third less to download.
+  JsonObject asset, gz;
   for (JsonObject a : doc["assets"].as<JsonArray>()) {
     if (strcmp(a["name"] | "", GITHUB_FW_ASSET) == 0) asset = a;
+    if (strcmp(a["name"] | "", GITHUB_FW_ASSET ".gz") == 0) gz = a;
   }
+  bool useGz = !gz.isNull();
+  if (useGz) asset = gz;
   if (asset.isNull()) return fail("Release " + tag + " has no " GITHUB_FW_ASSET ".");
 
   String notes = doc["body"] | "";
@@ -152,6 +156,7 @@ void jobCheck() {
     std::lock_guard<std::mutex> g(m);
     assetId = String((uint64_t)(asset["id"] | 0ULL));
     assetSha256 = digest.startsWith("sha256:") ? digest.substring(7) : "";
+    assetGz = useGz;
   }
   Preferences p;
   p.begin("ghupd", false);
@@ -222,11 +227,13 @@ void jobSignIn() {
 void jobInstall() {
   String id, sha;
   uint32_t size;
+  bool gz;
   {
     std::lock_guard<std::mutex> g(m);
     id = assetId;
     sha = assetSha256;
     size = st.size;
+    gz = assetGz;
   }
   update([](Status &s) { s.state = INSTALLING; s.error = ""; });
 
@@ -249,6 +256,7 @@ void jobInstall() {
     if (code != 302 || location.isEmpty()) return fail("Couldn't start the download (" + String(code) + ").");
   }
 
+  uint32_t t0 = millis();
   WiFiClientSecure client;
   secure(client);
   HTTPClient http;
@@ -262,15 +270,17 @@ void jobInstall() {
     http.end();
     return fail("The download didn't start (" + String(code) + ").");
   }
-  if (!updateBeginFast(size)) {
+  String err;
+  if (!fwupdate::begin(gz ? "GitHub (gz)" : "GitHub", gz ? 0 : size, err)) {
     http.end();
-    return fail("Not enough space for the update.");
+    return fail(err);
   }
 
   otaScreenBegin("Installing from GitHub");
+  uint32_t t1 = millis();
   WiFiClient *s = http.getStreamPtr();
-  static const size_t CHUNK = 4096;
-  uint8_t *buf = (uint8_t *)malloc(CHUNK);  // PSRAM (extmem threshold)
+  static const size_t CHUNK = 8192;
+  uint8_t *buf = (uint8_t *)malloc(CHUNK);  // PSRAM (extmem threshold); the writer copies to internal RAM
   mbedtls_sha256_context hash;
   mbedtls_sha256_init(&hash);
   mbedtls_sha256_starts_ret(&hash, 0);
@@ -287,7 +297,7 @@ void jobInstall() {
     if (n <= 0) continue;
     lastData = millis();
     mbedtls_sha256_update_ret(&hash, buf, n);
-    if (Update.write(buf, n) != (size_t)n) ok = false;
+    if (!fwupdate::write(buf, n)) ok = false;
     done += n;
     if (done - lastShown >= size / 100 || done == size) {
       otaScreenProgress(done, size);
@@ -296,6 +306,8 @@ void jobInstall() {
   }
   free(buf);
   http.end();
+  Serial.printf("[ghupdate] STATS %lu B in %lu ms (connect %lu ms)\n", (unsigned long)done,
+                (unsigned long)(millis() - t1), (unsigned long)(t1 - t0));
 
   uint8_t digest[32];
   mbedtls_sha256_finish_ret(&hash, digest);
@@ -306,11 +318,13 @@ void jobInstall() {
     ok = sha.equalsIgnoreCase(hex);
     if (!ok) Serial.println("[ghupdate] SHA-256 mismatch");
   }
-  // Update.end() also checks the image's own checksum before switching the boot slot.
-  if (!ok || !Update.end(true)) {
-    Update.abort();
+  // finish() also checks the image's own checksum and SHA-256 before switching the boot slot.
+  if (!ok || !fwupdate::finish()) {
+    String why = fwupdate::error();
+    fwupdate::abort();
     otaScreenFail();
-    return fail("The update didn't download completely. Nothing was changed.");
+    if (why.isEmpty()) why = "The update didn't download completely. Nothing was changed.";
+    return fail(why);
   }
   otaScreenRestarting();
   delay(500);

@@ -2,7 +2,8 @@
 # Publish a yOS update that boards can install from Settings › General › About.
 #   tools/release.sh 1.2 "What's new in this version"
 # Sets the version, builds, commits and pushes, then creates the GitHub Release v<version>
-# (tag and firmware.bin together). Boards signed in to GitHub see it on their next check.
+# (tag, firmware.bin.gz and firmware.bin together). Boards signed in to GitHub see it on their next check;
+# yOS 1.3 and later download firmware.bin.gz (a third smaller), older boards firmware.bin.
 set -e
 cd "$(dirname $0)/.."
 VERSION=$1
@@ -26,7 +27,7 @@ git push -q origin HEAD
 # gh creates the tag on the pushed commit together with the release, so a failure here leaves no
 # orphan tag and the script can simply be run again.
 if [[ -n $NOTES ]]; then NOTE_ARGS=(--notes "$NOTES"); else NOTE_ARGS=(--generate-notes); fi
-gh release create "v$VERSION" .pio/build/yos/firmware.bin --target "$(git rev-parse HEAD)" \
+gh release create "v$VERSION" .pio/build/yos/firmware.bin.gz .pio/build/yos/firmware.bin --target "$(git rev-parse HEAD)" \
   --title "yOS $VERSION" $NOTE_ARGS
 git fetch -q --tags origin
 echo "Released yOS $VERSION"
