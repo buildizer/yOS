@@ -12,8 +12,8 @@
 #include "services/firmware_update.h"
 
 // TLS root certificates, embedded by board_build.embed_files (tools/gen_cert_bundle.py).
-extern const uint8_t certBundle[] asm("_binary_data_x509_crt_bundle_bin_start");
-extern const uint8_t certBundleEnd[] asm("_binary_data_x509_crt_bundle_bin_end");
+extern const uint8_t bundleStart[] asm("_binary_data_x509_crt_bundle_bin_start");
+extern const uint8_t bundleEnd[] asm("_binary_data_x509_crt_bundle_bin_end");
 
 namespace ghupdate {
 namespace {
@@ -75,7 +75,9 @@ String bearer() {
 }
 
 void secure(WiFiClientSecure &c) {
-  c.setCACertBundle(certBundle, certBundleEnd - certBundle);
+  size_t n;
+  const uint8_t *bundle = certBundle(n);
+  c.setCACertBundle(bundle, n);
   c.setTimeout(15);
 }
 
@@ -454,6 +456,22 @@ void setAutoCheck(bool on) {
   p.begin("ghupd", false);
   p.putBool("auto", on);
   p.end();
+}
+
+// ESP-IDF 5 reads the bundle's offset table as 32-bit words, but embed_files places the file at any
+// byte address: an unaligned bundle is copied once (PSRAM) and kept.
+const uint8_t *certBundle(size_t &size) {
+  static const uint8_t *aligned = nullptr;
+  static std::once_flag once;
+  size = bundleEnd - bundleStart;
+  std::call_once(once, [&] {
+    aligned = bundleStart;
+    if ((uintptr_t)bundleStart % 4 == 0) return;
+    uint8_t *copy = (uint8_t *)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_32BIT);
+    if (copy) memcpy(copy, bundleStart, size);
+    aligned = copy;
+  });
+  return aligned;
 }
 
 int compareVersions(const char *a, const char *b) {

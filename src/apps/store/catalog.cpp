@@ -10,10 +10,8 @@
 #include "config.h"
 #include "version.h"
 #include "script/loader.h"
+#include "services/github_update.h"  // certBundle()
 
-// TLS root certificates, embedded by board_build.embed_files (tools/gen_cert_bundle.py).
-extern const uint8_t certBundle[] asm("_binary_data_x509_crt_bundle_bin_start");
-extern const uint8_t certBundleEnd[] asm("_binary_data_x509_crt_bundle_bin_end");
 
 namespace appstore {
 namespace {
@@ -62,7 +60,9 @@ bool urlSafe(const String &s) {
 int fetch(const String &token, const String &path, std::string &out, size_t maxBytes,
           std::function<void(size_t)> onBytes = nullptr) {
   WiFiClientSecure client;
-  client.setCACertBundle(certBundle, certBundleEnd - certBundle);
+  size_t bundleSize;
+  const uint8_t *bundle = ghupdate::certBundle(bundleSize);
+  client.setCACertBundle(bundle, bundleSize);
   client.setTimeout(15);
   HTTPClient http;
   http.useHTTP10(true);  // no chunked encoding: the body is a plain byte stream

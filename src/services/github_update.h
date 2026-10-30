@@ -51,4 +51,6 @@ bool autoCheck();
 void setAutoCheck(bool on);
 
 int compareVersions(const char *a, const char *b);  // <0, 0, >0 for dotted numbers ("1.10" > "1.9")
+// TLS root certificates for WiFiClientSecure::setCACertBundle (data/x509_crt_bundle.bin, 4-byte aligned).
+const uint8_t *certBundle(size_t &size);
 }
