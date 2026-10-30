@@ -9,12 +9,12 @@
 #define LV_COLOR_DEPTH 16
 #define LV_COLOR_16_SWAP 0
 
-// Use the system heap: large allocations land in PSRAM, small ones stay internal.
+// Every LVGL allocation goes to PSRAM, falling back to internal RAM (src/os/lv_mem_psram.c).
 #define LV_MEM_CUSTOM 1
-#define LV_MEM_CUSTOM_INCLUDE <stdlib.h>
-#define LV_MEM_CUSTOM_ALLOC malloc
-#define LV_MEM_CUSTOM_FREE free
-#define LV_MEM_CUSTOM_REALLOC realloc
+#define LV_MEM_CUSTOM_INCLUDE "os/lv_mem_psram.h"
+#define LV_MEM_CUSTOM_ALLOC yos_lv_malloc
+#define LV_MEM_CUSTOM_FREE yos_lv_free
+#define LV_MEM_CUSTOM_REALLOC yos_lv_realloc
 
 #define LV_TICK_CUSTOM 1
 #define LV_TICK_CUSTOM_INCLUDE "Arduino.h"
