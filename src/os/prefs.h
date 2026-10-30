@@ -26,4 +26,10 @@ void setOtaPassword(const String &pw);
 uint32_t otaPasswordVersion();   // bumps on every change, so the OTA service can pick it up
 bool autostart(const char *appId, bool fallback);
 void setAutostart(const char *appId, bool on);
+// Built-in apps hidden from the Home Screen and All Apps (App Store › hide/unhide).
+bool appHidden(const char *appId);
+void setAppHidden(const char *appId, bool hidden);
+// The dock's apps, in order, comma-separated ids (up to 5). Empty = the default dock.
+String dockApps();
+void setDockApps(const String &ids);
 }

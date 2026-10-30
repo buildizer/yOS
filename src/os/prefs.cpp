@@ -54,4 +54,28 @@ bool reduceMotion() { return reduceMotionVal; }
 void setReduceMotion(bool on) { reduceMotionVal = on; nvs.putBool("reducemotion", on); }
 bool autostart(const char *appId, bool fallback) { return nvs.getBool((String("as_") + appId).c_str(), fallback); }
 void setAutostart(const char *appId, bool on) { nvs.putBool((String("as_") + appId).c_str(), on); }
+// One string per list: NVS keys are capped at 15 characters, too short for "prefix + app id".
+static bool listHas(const String &list, const char *id) { return ("," + list + ",").indexOf(String(",") + id + ",") >= 0; }
+bool appHidden(const char *appId) { return listHas(nvs.getString("hidden", ""), appId); }
+void setAppHidden(const char *appId, bool hidden) {
+  String list = nvs.getString("hidden", "");
+  if (listHas(list, appId) == hidden) return;
+  if (hidden) {
+    list = list.isEmpty() ? String(appId) : list + "," + appId;
+  } else {
+    String out;
+    int start = 0;
+    while (start <= (int)list.length()) {
+      int end = list.indexOf(',', start);
+      if (end < 0) end = list.length();
+      String id = list.substring(start, end);
+      if (id.length() && id != appId) out += (out.isEmpty() ? "" : ",") + id;
+      start = end + 1;
+    }
+    list = out;
+  }
+  nvs.putString("hidden", list);
+}
+String dockApps() { return nvs.getString("dock", ""); }
+void setDockApps(const String &ids) { nvs.putString("dock", ids); }
 }
