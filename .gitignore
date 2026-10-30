@@ -6,3 +6,4 @@ wallpapers/*.rgb565
 wallpapers/*.thumb
 .DS_Store
 __pycache__/
+.omc/
