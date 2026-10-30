@@ -405,7 +405,7 @@ String imageVersion() { return version; }
 // ---------- after an update ----------
 
 namespace {
-bool confirmed = false;
+volatile bool confirmed = false;  // set by the UI task, read by loop()
 
 bool onTrial() {
   esp_ota_img_states_t state;
