@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>yOS App Store</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFFFFF}a:hover{color:#FFFFFF}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #FFFFFF; background: #000000;">
+<div style="position: absolute; top: 0; left: 0; right: 0; height: 32px; padding: 0 18px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; background: #000000; z-index: 3;">
+<span>18:42</span>
+<span style="display: flex; gap: 10px; align-items: center;">
+<svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.86a10 10 0 0 1 14 0"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/></svg>
+<svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+</span>
+</div>
+
+<div style="position: absolute; top: 32px; left: 0; right: 0; padding: 8px 16px 10px; background: #000000; z-index: 2; display: flex; flex-direction: column; gap: 10px;">
+<div style="display: flex; align-items: center; justify-content: space-between;">
+<h1 style="margin: 0; font-size: 30px; font-weight: 700;">App Store</h1>
+<a href="Main.dc.html" style="min-height: 44px; display: flex; align-items: center; color: #0A84FF; font-size: 17px; font-weight: 600; text-decoration: none;">Done</a>
+</div>
+<div role="tablist" aria-label="App Store sections" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: 9px; background: #2C2C2E;">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+<button type="button" role="tab" aria-selected="{{ t.on }}" onClick="{{ t.pick }}" style="height: 34px; border: 0; border-radius: 7px; background: {{ t.bg }}; color: #FFFFFF; font: 600 15px Inter, system-ui, sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">{{ t.label }}<sc-if value="{{ t.badge }}" hint-placeholder-val="{{ false }}"><span style="min-width: 18px; height: 18px; border-radius: 9px; background: #FF453A; font-size: 12px; display: inline-flex; align-items: center; justify-content: center;">{{ t.badge }}</span></sc-if></button>
+</sc-for>
+</div>
+</div>
+
+<div style="position: absolute; top: 134px; left: 0; right: 0; bottom: 0; overflow-y: auto; padding: 4px 16px 36px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;">
+
+<sc-if value="{{ noSd }}" hint-placeholder-val="{{ false }}">
+<div style="border-radius: 12px; background: #2A2205; color: #FFD60A; padding: 12px 14px; display: flex; gap: 10px; align-items: center; font-size: 15px; font-weight: 600;">
+<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+Insert an SD card to install apps. Apps from the App Store live on the card.
+</div>
+</sc-if>
+
+<sc-if value="{{ isDiscover }}" hint-placeholder-val="{{ true }}">
+<a href="AppStoreDetail.dc.html" style="border-radius: 16px; padding: 16px; text-decoration: none; background: linear-gradient(135deg, #0A3D91 0%, #1E6FD9 55%, #30B0C7 100%); display: flex; flex-direction: column; gap: 6px;">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.6px; color: rgba(255, 255, 255, 0.8);">NEW IN THE STORE</span>
+<span style="font-size: 22px; font-weight: 700;">Home Assistant</span>
+<span style="font-size: 15px; color: rgba(255, 255, 255, 0.86);">Turn lights, switches and scenes on and off from the panel.</span>
+</a>
+<div style="font-size: 15px; color: #98989F; padding: 4px 4px 0;">Apps</div>
+</sc-if>
+
+<sc-if value="{{ isUpdates }}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px;">
+<span style="font-size: 15px; color: #98989F;">{{ updatesHeader }}</span>
+<sc-if value="{{ hasUpdates }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ updateAll }}" style="min-height: 44px; border: 0; background: transparent; color: #0A84FF; font: 600 17px Inter, system-ui, sans-serif; cursor: pointer;">Update All</button></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isInstalled }}" hint-placeholder-val="{{ false }}">
+<div style="background: #1C1C1E; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; justify-content: space-between; font-size: 15px;"><span>SD Card</span><span style="color: #98989F;">{{ storageText }}</span></div>
+<div style="height: 8px; border-radius: 4px; background: #38383A; overflow: hidden; display: flex;"><span style="width: {{ storagePct }}; background: #0A84FF;"></span></div>
+</div>
+</sc-if>
+
+<div style="background: #1C1C1E; border-radius: 12px; overflow: hidden;">
+<sc-for list="{{ rows }}" as="a" hint-placeholder-count="5">
+<div style="min-height: 68px; display: flex; align-items: center; gap: 12px; padding: 8px 14px; box-sizing: border-box; border-top: {{ a.sep }};">
+<a href="AppStoreDetail.dc.html" aria-label="{{ a.name }} details" style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-decoration: none;">
+<span style="width: 48px; height: 48px; border-radius: 12px; background: {{ a.tint }}; display: flex; align-items: center; justify-content: center; flex: none;">
+<svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ a.path }}"/></svg>
+</span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+<span style="font-size: 17px; font-weight: 600;">{{ a.name }}</span>
+<span style="font-size: 13px; color: #98989F; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ a.sub }}</span>
+</span>
+</a>
+<sc-if value="{{ a.busy }}" hint-placeholder-val="{{ false }}">
+<svg role="img" aria-label="Installing {{ a.pct }}%" width="32" height="32" viewBox="0 0 32 32" style="flex: none;"><circle cx="16" cy="16" r="13" fill="none" stroke="#38383A" stroke-width="3"/><circle cx="16" cy="16" r="13" fill="none" stroke="#0A84FF" stroke-width="3" stroke-dasharray="{{ a.dash }}" transform="rotate(-90 16 16)"/><rect x="12" y="12" width="8" height="8" rx="1.5" fill="#0A84FF"/></svg>
+</sc-if>
+<sc-if value="{{ a.showButton }}" hint-placeholder-val="{{ true }}">
+<button type="button" onClick="{{ a.tap }}" aria-label="{{ a.button }} {{ a.name }}" style="min-width: 76px; height: 32px; padding: 0 14px; border: 0; border-radius: 16px; background: {{ a.btnBg }}; color: {{ a.btnFg }}; font: 700 14px Inter, system-ui, sans-serif; cursor: pointer; flex: none;">{{ a.button }}</button>
+</sc-if>
+</div>
+</sc-for>
+</div>
+<div style="font-size: 13px; color: #98989F; padding: 0 16px;">{{ footer }}</div>
+</div>
+
+<sc-if value="{{ confirm }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 5; display: flex; align-items: center; justify-content: center;">
+<div role="alertdialog" aria-label="Delete {{ confirmName }}" style="width: 290px; border-radius: 14px; background: #2C2C2E; overflow: hidden; text-align: center;">
+<div style="padding: 18px 16px 14px; display: flex; flex-direction: column; gap: 6px;">
+<span style="font-size: 17px; font-weight: 600;">Delete “{{ confirmName }}”?</span>
+<span style="font-size: 13px; color: #D1D1D6;">{{ confirmText }}</span>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #48484A;">
+<button type="button" onClick="{{ cancelDelete }}" style="height: 46px; border: 0; background: transparent; color: #0A84FF; font: 17px Inter, system-ui, sans-serif; cursor: pointer;">Cancel</button>
+<button type="button" onClick="{{ doDelete }}" style="height: 46px; border: 0; border-left: 1px solid #48484A; background: transparent; color: #FF453A; font: 600 17px Inter, system-ui, sans-serif; cursor: pointer;">Delete</button>
+</div>
+</div>
+</div>
+</sc-if>
+<div style="position: absolute; bottom: 8px; left: 170px; width: 140px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.6); z-index: 4;"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"sdCard":{"editor":"boolean","default":true,"label":"SD card inserted"},"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    // installed: on the SD card (store apps) or enabled (optional built-ins). update: a newer version is in the store.
+    this.state = {
+      tab: 0, confirm: null, progress: {},
+      apps: [
+        { id: 'ha', name: 'Home Assistant', sub: 'Lights, switches and scenes', size: 42, kind: 'store', installed: false, tint: '#18BCF2', path: 'M3 10 12 3l9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM9 22V12h6v10' },
+        { id: 'calc', name: 'Calculator', sub: 'Basic and scientific', size: 18, kind: 'store', installed: true, update: true, tint: '#FF9F0A', path: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15v4M8 19h.01M12 19h.01' },
+        { id: 'timer', name: 'Timers', sub: 'Stopwatch, countdowns and alarms', size: 24, kind: 'store', installed: true, tint: '#FF453A', path: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z' },
+        { id: 'sys', name: 'System Monitor', sub: 'CPU, memory and Wi-Fi graphs', size: 21, kind: 'store', installed: false, tint: '#30D158', path: 'M9 9h6v6H9ZM5 5h14v14H5ZM9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4' },
+        { id: 'focus', name: 'Focus', sub: 'Pomodoro work and break timer', size: 15, kind: 'store', installed: false, tint: '#BF5AF2', path: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12ZM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z' },
+        { id: 'blocks', name: 'Blocks', sub: 'Puzzle game for touch', size: 36, kind: 'store', installed: false, tint: '#5E5CE6', path: 'M3 3h7v7H3ZM14 3h7v7h-7ZM14 14h7v7h-7ZM3 14h7v7H3Z' },
+        { id: 'weather', name: 'Weather', sub: 'Built in · forecast for your city', size: 0, kind: 'builtin', installed: true, tint: '#1E6FD9', path: 'M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6ZM12 2v2M20 12h2M19.07 4.93l-1.41 1.41' },
+        { id: 'netwatch', name: 'Netwatch', sub: 'Built in · home network monitor', size: 0, kind: 'builtin', installed: true, tint: '#248A3D', path: 'M22 12h-4l-3 9L9 3l-3 9H2' }
+      ]
+    };
+  }
+  setApp(id, patch) {
+    this.setState({ apps: this.state.apps.map(a => a.id === id ? Object.assign({}, a, patch) : a) });
+  }
+  install(a, isUpdate) {
+    if (a.kind === 'builtin') { this.setApp(a.id, { installed: true }); return; }  // nothing to download: shows it again
+    var pct = 0;
+    var tick = () => {
+      pct += 20;
+      this.setState({ progress: Object.assign({}, this.state.progress, { [a.id]: pct }) });
+      if (pct < 100) { setTimeout(tick, 250); return; }
+      var p = Object.assign({}, this.state.progress); delete p[a.id];
+      this.setState({ progress: p });
+      this.setApp(a.id, { installed: true, update: false });
+    };
+    tick();
+  }
+  renderVals() {
+    var s = this.state;
+    var sd = this.props.sdCard !== false;
+    var line = '1px solid #38383A';
+    var updates = s.apps.filter(a => a.installed && a.update);
+    var circ = 2 * Math.PI * 13;
+    var list = s.tab === 0 ? s.apps : s.tab === 1 ? updates : s.apps.filter(a => a.installed);
+    var rows = list.map((a, i) => {
+      var busy = s.progress[a.id] != null;
+      var label, bg = '#2C2C2E', fg = '#0A84FF', tap;
+      if (s.tab === 2) {
+        label = 'Delete'; fg = '#FF453A';
+        tap = () => this.setState({ confirm: a.id });
+      } else if (a.installed && a.update) {
+        label = 'Update'; bg = '#0A84FF'; fg = '#FFFFFF';
+        tap = () => this.install(a, true);
+      } else if (a.installed) {
+        label = 'Open'; tap = () => {};
+      } else {
+        label = 'Get'; tap = sd || a.kind === 'builtin' ? () => this.install(a) : () => {};
+        if (!sd && a.kind !== 'builtin') { fg = '#636366'; }
+      }
+      var sub = s.tab === 2 ? (a.kind === 'builtin' ? 'Built in · no download needed' : a.size + ' KB on SD card')
+        : s.tab === 1 ? 'Version 1.1 · bug fixes and a scientific mode' : a.sub;
+      return {
+        name: a.name, sub: sub, tint: a.tint, path: a.path, sep: i ? line : '0',
+        busy: busy, pct: s.progress[a.id] || 0, dash: (circ * (s.progress[a.id] || 0) / 100).toFixed(1) + ' ' + circ.toFixed(1),
+        showButton: !busy, button: label, btnBg: bg, btnFg: fg, tap: tap
+      };
+    });
+    var used = s.apps.filter(a => a.installed && a.kind === 'store').reduce((n, a) => n + a.size, 0);
+    var target = s.apps.find(a => a.id === s.confirm);
+    return {
+      tabs: ['Discover', 'Updates', 'Installed'].map((label, i) => ({
+        label: label, on: s.tab === i ? 'true' : 'false', bg: s.tab === i ? '#636366' : 'transparent',
+        badge: i === 1 && updates.length ? String(updates.length) : '', pick: () => this.setState({ tab: i })
+      })),
+      isDiscover: s.tab === 0, isUpdates: s.tab === 1, isInstalled: s.tab === 2,
+      noSd: !sd,
+      hasUpdates: updates.length > 0,
+      updatesHeader: updates.length ? updates.length + ' update available' : 'All apps are up to date',
+      updateAll: () => updates.forEach(a => this.install(a, true)),
+      storageText: used + ' KB used by apps · 29.7 GB free',
+      storagePct: Math.max(2, Math.min(100, used / 4)) + '%',
+      rows: rows,
+      footer: s.tab === 2 ? 'Deleting an App Store app removes its folder from the SD card. Built-in apps are only hidden, and Get shows them again.'
+        : 'Apps come from the yOS repo on GitHub and install to the SD card in /apps.',
+      confirm: !!target,
+      confirmName: target ? target.name : '',
+      confirmText: target && target.kind === 'builtin' ? 'It disappears from the Home Screen and its data is removed. You can get it back from the App Store at any time.'
+        : 'This removes the app and its data from the SD card.',
+      cancelDelete: () => this.setState({ confirm: null }),
+      doDelete: () => { var id = s.confirm; this.setState({ confirm: null }); this.setApp(id, { installed: false, update: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

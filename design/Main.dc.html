@@ -15,6 +15,7 @@ a{color:#9CC8FF}a:hover{color:#C9E0FF}
 </style>
 </helmet>
 <div style="width: 480px; height: 480px; position: relative; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #FFFFFF; background: #0B1220;">
+<div style="position: absolute; inset: 0; transform: rotate({{ rot }}deg); transition: transform 0.35s ease;">
 <img src="/_blob/86ed3bfc61f91eeb559736f80ad3b53e" alt="" style="position: absolute; inset: 0; width: 480px; height: 480px; object-fit: cover;">
 <div style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.18);"></div>
 
@@ -35,8 +36,24 @@ Partly cloudy · H 28° L 18°
 </div>
 </div>
 
-<nav aria-label="Apps" style="position: absolute; left: 16px; right: 16px; bottom: 22px; height: 112px; border-radius: 28px; background: rgba(20, 24, 40, 0.55); border: 1px solid rgba(255, 255, 255, 0.12); display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: center; padding: 0 4px;">
-<sc-for list="{{ apps }}" as="app" hint-placeholder-count="6">
+<button type="button" onClick="{{ rotate }}" aria-label="Rotate screen, now {{ rotLabel }}" style="position: absolute; top: 236px; left: 28px; width: 150px; height: 92px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; background: rgba(20, 24, 40, 0.55); color: #FFFFFF; padding: 12px 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; cursor: pointer; font-family: Inter, system-ui, sans-serif; text-align: left;">
+<span style="display: flex; align-items: center; justify-content: space-between; align-self: stretch;">
+<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+<span style="font-size: 22px; font-weight: 600;">{{ rotLabel }}</span>
+</span>
+<span style="display: flex; flex-direction: column;">
+<span style="font-size: 15px; font-weight: 600;">Rotation</span>
+<span style="font-size: 13px; color: rgba(255, 255, 255, 0.75);">Tap to turn 90°</span>
+</span>
+</button>
+
+<div aria-label="Page 1 of 2" style="position: absolute; left: 0; right: 0; bottom: 142px; display: flex; justify-content: center; align-items: center; gap: 10px;">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: #FFFFFF;"></span>
+<a href="AllApps.dc.html" aria-label="All Apps (swipe to the next page)" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;"><span style="width: 8px; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.4);"></span></a>
+</div>
+
+<nav aria-label="Apps" style="position: absolute; left: 16px; right: 16px; bottom: 22px; height: 112px; border-radius: 28px; background: rgba(20, 24, 40, 0.55); border: 1px solid rgba(255, 255, 255, 0.12); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; padding: 0 6px;">
+<sc-for list="{{ apps }}" as="app" hint-placeholder-count="5">
 <a href="{{ app.href }}" aria-label="{{ app.name }}" style="display: flex; flex-direction: column; align-items: center; gap: 7px; text-decoration: none; color: #FFFFFF;">
 <span style="width: 56px; height: 56px; border-radius: 14px; background: {{ app.tint }}; display: flex; align-items: center; justify-content: center; position: relative;">
 <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ app.path }}"/></svg>
@@ -47,17 +64,25 @@ Partly cloudy · H 28° L 18°
 </nav>
 <div style="position: absolute; bottom: 8px; left: 170px; width: 140px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.55);"></div>
 </div>
+</div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":480,"height":480}}'>
 class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { rot: 0 };
+  }
   renderVals() {
+    var rot = this.state.rot;
     return {
+      rot: rot,
+      rotLabel: rot + '°',
+      rotate: () => this.setState({ rot: (this.state.rot + 90) % 360 }),
       apps: [
         { name: 'Netwatch', href: '#', tint: '#248A3D', path: 'M22 12h-4l-3 9L9 3l-3 9H2' },
         { name: 'Clock', href: 'AppClock.dc.html', tint: '#3A3A3C', path: 'M12 6v6l4 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0' },
         { name: 'Weather', href: 'AppWeather.dc.html', tint: '#1E6FD9', path: 'M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6ZM12 2v2M20 12h2M19.07 4.93l-1.41 1.41' },
         { name: 'Files', href: 'AppFiles.dc.html', tint: '#0060DF', path: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z' },
-        { name: 'All Apps', href: 'AllApps.dc.html', tint: 'rgba(255, 255, 255, 0.22)', path: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z' },
         { name: 'Settings', href: 'Settings.dc.html', tint: '#636366', path: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15l1.6 2.8-2.2 2.2-2.8-1.6a7 7 0 0 1-2 .9L13.4 22h-2.8l-.6-2.7a7 7 0 0 1-2-.9L5.2 20 3 17.8 4.6 15a7 7 0 0 1-.9-2L1 12.4v-2.8l2.7-.6a7 7 0 0 1 .9-2L3 4.2 5.2 2l2.8 1.6a7 7 0 0 1 2-.9L10.6 0h2.8l.6 2.7a7 7 0 0 1 2 .9L18.8 2 21 4.2 19.4 7a7 7 0 0 1 .9 2l2.7.6v2.8l-2.7.6a7 7 0 0 1-.9 2Z' }
       ]
     };

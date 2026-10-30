@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>yOS App Store: app page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0A84FF}a:hover{color:#4BA3FF}
+</style>
+</helmet>
+<div style="width: 480px; height: 480px; position: relative; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #FFFFFF; background: #000000;">
+<div style="position: absolute; top: 0; left: 0; right: 0; height: 32px; padding: 0 18px; display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; background: #000000; z-index: 2;">
+<span>18:42</span>
+<span style="display: flex; gap: 10px; align-items: center;">
+<svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.86a10 10 0 0 1 14 0"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/></svg>
+</span>
+</div>
+
+<div style="position: absolute; top: 32px; left: 0; right: 0; bottom: 0; overflow-y: auto; padding: 0 16px 36px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;">
+<a href="AppStore.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 2px; font-size: 17px; text-decoration: none; align-self: flex-start;">
+<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>App Store</a>
+
+<div style="display: flex; gap: 16px; align-items: center;">
+<span style="width: 96px; height: 96px; border-radius: 22px; background: #18BCF2; display: flex; align-items: center; justify-content: center; flex: none;">
+<svg aria-hidden="true" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10 12 3l9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM9 22V12h6v10"/></svg>
+</span>
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+<h1 style="margin: 0; font-size: 24px; font-weight: 700;">Home Assistant</h1>
+<span style="font-size: 15px; color: #98989F;">Lights, switches and scenes</span>
+<div style="display: flex; align-items: center; gap: 10px; margin-top: 6px;">
+<sc-if value="{{ busy }}" hint-placeholder-val="{{ false }}">
+<svg role="img" aria-label="Installing {{ pct }}%" width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r="14" fill="none" stroke="#38383A" stroke-width="3"/><circle cx="17" cy="17" r="14" fill="none" stroke="#0A84FF" stroke-width="3" stroke-dasharray="{{ dash }}" transform="rotate(-90 17 17)"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="#0A84FF"/></svg>
+<span style="font-size: 13px; color: #98989F;">Downloading to SD card…</span>
+</sc-if>
+<sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
+<button type="button" onClick="{{ primary }}" style="min-width: 88px; height: 34px; padding: 0 18px; border: 0; border-radius: 17px; background: #0A84FF; color: #FFFFFF; font: 700 15px Inter, system-ui, sans-serif; cursor: pointer;">{{ primaryLabel }}</button>
+</sc-if>
+</div>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #38383A; border-bottom: 1px solid #38383A; padding: 10px 0;">
+<sc-for list="{{ chips }}" as="c" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 2px; border-left: {{ c.sep }};">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.4px; color: #8E8E93;">{{ c.k }}</span>
+<span style="font-size: 17px; font-weight: 700;">{{ c.v }}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="font-size: 15px; line-height: 1.45; color: #D1D1D6;">See your lights, switches and scenes on the panel and tap to turn them on or off. Sign in once with a Home Assistant access token, kept on the SD card.</div>
+
+<div style="font-size: 15px; color: #98989F; padding: 4px 4px 0;">What's New · Version 1.0</div>
+<div style="font-size: 15px; line-height: 1.45; color: #D1D1D6;">First release: rooms, favourites and scenes.</div>
+
+<div style="font-size: 15px; color: #98989F; padding: 4px 4px 0;">Information</div>
+<div style="background: #1C1C1E; border-radius: 12px; overflow: hidden;">
+<sc-for list="{{ info }}" as="r" hint-placeholder-count="5">
+<div style="min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-left: 16px; padding-right: 16px; border-top: {{ r.sep }}; font-size: 15px;"><span>{{ r.k }}</span><span style="color: #98989F; text-align: right;">{{ r.v }}</span></div>
+</sc-for>
+</div>
+
+<sc-if value="{{ installed }}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{ askDelete }}" style="min-height: 50px; border: 0; border-radius: 12px; background: #1C1C1E; color: #FF453A; font: 17px Inter, system-ui, sans-serif; cursor: pointer;">Delete App</button>
+</sc-if>
+</div>
+
+<sc-if value="{{ confirm }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 5; display: flex; align-items: center; justify-content: center;">
+<div role="alertdialog" aria-label="Delete Home Assistant" style="width: 290px; border-radius: 14px; background: #2C2C2E; overflow: hidden; text-align: center;">
+<div style="padding: 18px 16px 14px; display: flex; flex-direction: column; gap: 6px;">
+<span style="font-size: 17px; font-weight: 600;">Delete “Home Assistant”?</span>
+<span style="font-size: 13px; color: #D1D1D6;">This removes the app and its data from the SD card.</span>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #48484A;">
+<button type="button" onClick="{{ cancelDelete }}" style="height: 46px; border: 0; background: transparent; color: #0A84FF; font: 17px Inter, system-ui, sans-serif; cursor: pointer;">Cancel</button>
+<button type="button" onClick="{{ doDelete }}" style="height: 46px; border: 0; border-left: 1px solid #48484A; background: transparent; color: #FF453A; font: 600 17px Inter, system-ui, sans-serif; cursor: pointer;">Delete</button>
+</div>
+</div>
+</div>
+</sc-if>
+<div style="position: absolute; bottom: 8px; left: 170px; width: 140px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.6); z-index: 4;"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":480,"height":480}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { phase: 'get', pct: 0, confirm: false };  // get -> downloading -> installed
+  }
+  get() {
+    var tick = () => {
+      var pct = this.state.pct + 20;
+      if (pct >= 100) { this.setState({ phase: 'installed', pct: 0 }); return; }
+      this.setState({ phase: 'downloading', pct: pct });
+      setTimeout(tick, 250);
+    };
+    this.setState({ phase: 'downloading', pct: 0 });
+    setTimeout(tick, 150);
+  }
+  renderVals() {
+    var s = this.state;
+    var circ = 2 * Math.PI * 14;
+    var line = '1px solid #38383A';
+    var installed = s.phase === 'installed';
+    return {
+      busy: s.phase === 'downloading', idle: s.phase !== 'downloading',
+      pct: s.pct, dash: (circ * s.pct / 100).toFixed(1) + ' ' + circ.toFixed(1),
+      primaryLabel: installed ? 'Open' : 'Get',
+      primary: () => { if (!installed) this.get(); },
+      installed: installed,
+      chips: [
+        { k: 'SIZE', v: '42 KB', sep: '0' },
+        { k: 'VERSION', v: '1.0', sep: line },
+        { k: 'NEEDS', v: 'Wi-Fi', sep: line },
+        { k: 'TYPE', v: 'Script', sep: line }
+      ],
+      info: [
+        { k: 'Developer', v: 'buildizer', sep: '0' },
+        { k: 'Source', v: 'GitHub · buildizer/yOS', sep: line },
+        { k: 'Installs to', v: installed ? 'SD card › /apps/home-assistant' : 'SD card', sep: line },
+        { k: 'Requires', v: 'yOS 1.2 or later', sep: line },
+        { k: 'Permissions', v: 'Network, its own folder', sep: line }
+      ],
+      confirm: s.confirm,
+      askDelete: () => this.setState({ confirm: true }),
+      cancelDelete: () => this.setState({ confirm: false }),
+      doDelete: () => this.setState({ confirm: false, phase: 'get' })
+    };
+  }
+}
+</script>
+</body>
+</html>

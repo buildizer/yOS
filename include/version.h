@@ -1,4 +1,4 @@
 #pragma once
 
 // The firmware version shown on the boot screen.
-#define YOS_FIRMWARE_VERSION "1.1"
+#define YOS_FIRMWARE_VERSION "1.2"

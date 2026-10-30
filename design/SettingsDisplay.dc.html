@@ -39,12 +39,13 @@ a{color:#0A84FF}a:hover{color:#4BA3FF}
 <div style="font-size: 13px; color: #98989F; padding: 0 16px;">Automatic switches to dark at 18:30 and back to light at 06:30.</div>
 
 <div style="font-size: 15px; color: #98989F; padding: 4px 16px 0;">Brightness</div>
-<div style="background: #1C1C1E; border-radius: 12px; min-height: 56px; display: flex; align-items: center; gap: 14px; padding: 0 16px;">
+<div style="background: #1C1C1E; border-radius: 12px; min-height: 56px; display: flex; align-items: center; gap: 14px; padding: 0 16px; opacity: 0.45;">
 <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#98989F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
 <label style="flex: 1; display: flex; align-items: center;"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Brightness</span>
-<input type="range" min="4" max="100" value="80" style="flex: 1; accent-color: #0A84FF;"></label>
-<span style="font-size: 17px; color: #98989F; min-width: 44px; text-align: right;">80%</span>
+<input type="range" min="4" max="100" value="100" disabled style="flex: 1; accent-color: #98989F;"></label>
+<span style="font-size: 17px; color: #98989F; min-width: 44px; text-align: right;">100%</span>
 </div>
+<div style="font-size: 13px; color: #98989F; padding: 0 16px;">Brightness is fixed at full for now.</div>
 
 <div style="font-size: 15px; color: #98989F; padding: 4px 16px 0;">Home Screen</div>
 <div style="background: #1C1C1E; border-radius: 12px;">
@@ -55,6 +56,24 @@ a{color:#0A84FF}a:hover{color:#4BA3FF}
 <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5A5A5F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
 </a>
 </div>
+
+<div style="font-size: 15px; color: #98989F; padding: 4px 16px 0;">Rotation</div>
+<div style="background: #1C1C1E; border-radius: 12px;">
+<div style="padding: 12px;">
+<div role="radiogroup" aria-label="Rotation" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: 9px; background: #2C2C2E;">
+<sc-for list="{{ rotation }}" as="o" hint-placeholder-count="4">
+<button type="button" role="radio" aria-checked="{{ o.on }}" onClick="{{ o.pick }}" style="height: 36px; border: 0; border-radius: 7px; background: {{ o.bg }}; color: #FFFFFF; font: 600 15px Inter, system-ui, sans-serif; cursor: pointer;">{{ o.label }}</button>
+</sc-for>
+</div>
+</div>
+<div style="min-height: 50px; display: flex; align-items: center; justify-content: space-between; margin-left: 16px; padding-right: 16px; border-top: 1px solid #38383A;">
+<span style="font-size: 17px;">Show on Home Screen</span>
+<button type="button" role="switch" aria-checked="{{ widget }}" aria-label="Show rotation on Home Screen" onClick="{{ toggleWidget }}" style="width: 51px; height: 31px; border: 0; border-radius: 16px; background: {{ widgetBg }}; position: relative; cursor: pointer; padding: 0;">
+<span style="position: absolute; top: 2px; left: {{ widgetKnob }}; width: 27px; height: 27px; border-radius: 50%; background: #FFFFFF;"></span>
+</button>
+</div>
+</div>
+<div style="font-size: 13px; color: #98989F; padding: 0 16px;">Turns the whole screen and touch for panels mounted sideways or upside down. Animations are a little slower at 90° and 270°.</div>
 
 <div style="font-size: 15px; color: #98989F; padding: 4px 16px 0;">Dim After</div>
 <div style="background: #1C1C1E; border-radius: 12px; padding: 12px;">
@@ -87,7 +106,7 @@ a{color:#0A84FF}a:hover{color:#4BA3FF}
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { appearance: 0, dim: 1, reduce: false };
+    this.state = { appearance: 0, dim: 1, reduce: false, rotation: 0, widget: true };
   }
   renderVals() {
     var s = this.state;
@@ -98,6 +117,11 @@ class Component extends DCLogic {
     return {
       appearance: seg(['Automatic', 'Light', 'Dark'], 'appearance'),
       dim: seg(['1 min', '5 min', '15 min', 'Never'], 'dim'),
+      rotation: seg(['0°', '90°', '180°', '270°'], 'rotation'),
+      widget: s.widget ? 'true' : 'false',
+      widgetBg: s.widget ? '#30D158' : '#39393D',
+      widgetKnob: s.widget ? '22px' : '2px',
+      toggleWidget: () => this.setState({ widget: !s.widget }),
       reduce: s.reduce ? 'true' : 'false',
       reduceBg: s.reduce ? '#30D158' : '#39393D',
       reduceKnob: s.reduce ? '22px' : '2px',
