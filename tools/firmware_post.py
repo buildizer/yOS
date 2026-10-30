@@ -1,8 +1,9 @@
 # PlatformIO post-build step (extra_scripts in platformio.ini).
 #  1. Names the image: the app description every ESP-IDF image carries says "arduino-lib-builder" for
-#     any Arduino sketch. It is patched in the ELF, before esptool turns that into firmware.bin (so the
-#     image checksum and SHA-256 are computed over the patched bytes), to project "yOS" and the version
-#     from include/version.h. yOS refuses update images that don't carry this name (firmware_update.cpp).
+#     any Arduino sketch (the project folder's name when the libraries are rebuilt). It is patched in
+#     the ELF, before esptool turns that into firmware.bin (so the image checksum and SHA-256 are
+#     computed over the patched bytes), to project "yOS" and the version from include/version.h.
+#     yOS refuses update images that don't carry this name (firmware_update.cpp).
 #  2. Writes firmware.bin.gz next to firmware.bin (gzip -9, no name or time stamp, so the same build
 #     gives the same file). Updates travel compressed: about a third smaller.
 import gzip, os, re, struct
@@ -21,15 +22,26 @@ def firmware_version():
     return m.group(1).encode()
 
 
+def framework_build(source):
+    # With custom_sdkconfig, pioarduino first builds the Arduino libraries from ESP-IDF as a placeholder
+    # app (.dummy/sketch.cpp); these post actions run for it too, and there is nothing of yOS to name.
+    return any("/.dummy/" in str(s).replace("\\", "/") for s in source)
+
+
 def name_image(target, source, env):
+    if framework_build(source):
+        return
     path = str(target[0])
     elf = bytearray(open(path, "rb").read())
     # esp_app_desc_t: magic, secure_version, reserved[2], version[32] at 16, project_name[32] at 48
+    # Prebuilt Arduino libraries call the app "arduino-lib-builder"; rebuilt ones (custom_sdkconfig) use
+    # the project folder's name.
+    names = (b"arduino-lib-builder", PROJECT, os.path.basename(env.subst("$PROJECT_DIR")).encode()[:31])
     hits = []
     at = elf.find(APP_DESC_MAGIC)
     while at >= 0:
         name = bytes(elf[at + 48:at + 80]).split(b"\0")[0]
-        if name in (b"arduino-lib-builder", PROJECT) and elf[at + 16:at + 24] != b"\0" * 8:
+        if name in names and elf[at + 16:at + 24] != b"\0" * 8:
             hits.append(at)
         at = elf.find(APP_DESC_MAGIC, at + 4)
     if len(hits) != 1:

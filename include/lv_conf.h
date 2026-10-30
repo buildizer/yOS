@@ -11,7 +11,9 @@
 
 // Every LVGL allocation goes to PSRAM, falling back to internal RAM (src/os/lv_mem_psram.c).
 #define LV_MEM_CUSTOM 1
-#define LV_MEM_CUSTOM_INCLUDE "os/lv_mem_psram.h"
+// Declared here relative to this file: LVGL's own sources don't have src/ on their include path.
+#include "../src/os/lv_mem_psram.h"
+#define LV_MEM_CUSTOM_INCLUDE <stddef.h>
 #define LV_MEM_CUSTOM_ALLOC yos_lv_malloc
 #define LV_MEM_CUSTOM_FREE yos_lv_free
 #define LV_MEM_CUSTOM_REALLOC yos_lv_realloc
