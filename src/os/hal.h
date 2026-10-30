@@ -19,6 +19,7 @@ bool screenAsleep();
 uint16_t *framebuffer();
 // Developer tool: drive the backlight PWM directly (freq Hz, duty 0-100 %); freq 0 returns control to the OS.
 void testBacklight(uint32_t freq, float dutyPct);
+void applyBacklightFreq();         // switch the PWM to prefs::backlightFreq() now
 // Frame statistics since the last call: frames drawn, average and worst render+flush time, and wall time.
 struct Perf { uint32_t frames, avgMs, maxMs, windowMs, flushUs; };
 Perf takePerf();           // RGB565, 480x480

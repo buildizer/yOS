@@ -6,6 +6,7 @@ static Preferences nvs;
 static Appearance appearanceVal = APPEARANCE_AUTO;
 static uint8_t brightnessVal = 255;
 static uint8_t dimAfterVal = 5;
+static uint32_t blFreqVal = 20000;
 static bool reduceMotionVal = false, use24hVal = true, rotationWidgetVal = true;
 static uint8_t rotationVal = 0;
 static String otaPasswordVal;
@@ -17,6 +18,7 @@ void load() {
   appearanceVal = Appearance(nvs.getUChar("appearance", APPEARANCE_AUTO));
   brightnessVal = nvs.getUChar("brightness", 255);
   dimAfterVal = nvs.getUChar("dimafter", 5);
+  blFreqVal = constrain(nvs.getUInt("blfreq", 20000), 50, 40000);
   reduceMotionVal = nvs.getBool("reducemotion", false);
   use24hVal = nvs.getBool("use24h", true);
   rotationVal = nvs.getUChar("rotation", 0) & 3;
@@ -37,10 +39,15 @@ void setOtaPassword(const String &pw) {
 uint32_t otaPasswordVersion() { return otaPasswordVer; }
 Appearance appearance() { return appearanceVal; }
 void setAppearance(Appearance a) { appearanceVal = a; nvs.putUChar("appearance", a); }
-uint8_t brightness() { return 255; }  // brightness control is disabled for now: always full (saved value kept)
+uint8_t brightness() { return brightnessVal; }
 void setBrightness(uint8_t b, bool persist) {
   brightnessVal = max<uint8_t>(b, 10);
   if (persist) nvs.putUChar("brightness", brightnessVal);  // flash writes stall the UI and the panel
+}
+uint32_t backlightFreq() { return blFreqVal; }
+void setBacklightFreq(uint32_t hz, bool persist) {
+  blFreqVal = constrain(hz, 50, 40000);
+  if (persist) nvs.putUInt("blfreq", blFreqVal);
 }
 uint8_t dimAfterMin() { return dimAfterVal; }
 void setDimAfterMin(uint8_t m) { dimAfterVal = m; nvs.putUChar("dimafter", m); }

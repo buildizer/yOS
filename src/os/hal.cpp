@@ -10,12 +10,13 @@
 // ST7701 configured over 3-wire SPI, pixels over 16-bit RGB.
 #define PIN_BL 38
 #define BL_CHANNEL 0
-// Backlight PWM. Tested on the panel at 40 % duty: 100 Hz-5 kHz left the screen dark or near-dark
-// (the driver doesn't follow a slow carrier), while 20-40 kHz gave a steady, proportional 40 %.
-// 20 kHz with 10 bits fits the LEDC clock (20 kHz x 1024 = 20.5 MHz < 80 MHz APB).
-static const uint32_t BL_FREQ = 20000;
+// Backlight PWM. The frequency is a setting (prefs::backlightFreq) because units of this board differ:
+// on one, 100 Hz-5 kHz at 40 % duty left the screen dark (its driver doesn't follow a slow carrier) and
+// 20-40 kHz dimmed properly; on others 20 kHz goes black below 100 % and ~100 Hz works.
+// 10 bits as long as freq x 1024 fits the 80 MHz APB clock (up to ~78 kHz), fewer above that.
 static const uint8_t BL_BITS = 10;
-static const uint32_t BL_MAX = (1 << BL_BITS) - 1;
+static uint8_t blBits = BL_BITS;
+static uint32_t blMax = (1 << BL_BITS) - 1;  // duty for 100 %: the core turns it into a steady high
 static const int W = 480, H = 480;
 
 static Arduino_DataBus *bus = new Arduino_SWSPI(
@@ -112,6 +113,7 @@ static void flush(lv_disp_drv_t *drv, const lv_area_t *a, lv_color_t *px) {
 static const int EDGE = 28, GESTURE_MIN = 70;
 static volatile SystemGesture pendingGesture = GESTURE_NONE;
 static uint32_t lastActivity = 0;
+static uint32_t touchDownAt = 0;    // start of the current touch, 0 when up (backlight recovery hold)
 static bool swallowTouch = false;  // the touch that woke the screen does nothing else
 
 static struct {
@@ -150,12 +152,14 @@ static void readTouch(lv_indev_drv_t *, lv_indev_data_t *data) {
   if (down) {
     if (!wasDown) {
       sx = x; sy = y;
+      touchDownAt = millis() | 1;
       if (hal::screenAsleep()) swallowTouch = true;
       hal::wake();
     }
     lx = x; ly = y;
     lastActivity = millis();
   } else if (wasDown) {
+    touchDownAt = 0;
     // Edge swipes, judged on release: up from the bottom edge = home, right from the left edge = back.
     // Judge edge swipes in screen (rotated) coordinates; LVGL does the same for its own input.
     int16_t ax = sx, ay = sy, bx = lx, by = ly;
@@ -178,6 +182,7 @@ static void readTouch(lv_indev_drv_t *, lv_indev_data_t *data) {
 // ---- backlight ----
 
 static const uint32_t OFF_AFTER_MS = 30 * 60 * 1000, FADE_MS = 300;
+static const uint32_t RECOVER_HOLD_MS = 10000;  // touch and hold this long: back to full brightness
 static float blLevel = 0;
 static bool blTesting = false;
 static uint8_t blTarget = 0;
@@ -191,10 +196,23 @@ static uint32_t blDuty(float level) {
   if (level <= 0.5f) return 0;
   const float floorDuty = 0.16f;
   float d = floorDuty + (1.0f - floorDuty) * powf(min(level, 255.0f) / 255.0f, 1.8f);
-  return uint32_t(d * BL_MAX + 0.5f);
+  return uint32_t(d * blMax + 0.5f);
+}
+
+static void blSetFreq(uint32_t freq) {
+  blBits = BL_BITS;
+  while (blBits > 4 && (uint64_t)freq << blBits > 80000000ULL) blBits--;
+  blMax = (1 << blBits) - 1;
+  ledcSetup(BL_CHANNEL, freq, blBits);
 }
 
 static void updateBacklight() {
+  // A brightness/frequency pair this panel can't show leaves it black with no way to see the slider:
+  // a long hold anywhere brings back 100 %, which lights at any frequency.
+  if (touchDownAt && millis() - touchDownAt > RECOVER_HOLD_MS && prefs::brightness() < 255) {
+    prefs::setBrightness(255);
+    touchDownAt = 0;
+  }
   uint32_t idle = millis() - lastActivity;
   uint8_t full = prefs::brightness();
   uint32_t dimAfter = prefs::dimAfterMin() * 60000UL;
@@ -232,7 +250,7 @@ void begin() {
   lcd->begin();
   memset(lcd->getFramebuffer(), 0, W * H * sizeof(uint16_t));
   Cache_WriteBack_Addr((uint32_t)lcd->getFramebuffer(), W * H * sizeof(uint16_t));
-  ledcSetup(BL_CHANNEL, BL_FREQ, BL_BITS);
+  blSetFreq(prefs::backlightFreq());
   ledcAttachPin(PIN_BL, BL_CHANNEL);
   touchStart();
 
@@ -289,14 +307,17 @@ uint16_t *framebuffer() { return lcd->getFramebuffer(); }
 void testBacklight(uint32_t freq, float dutyPct) {
   if (freq == 0) {
     blTesting = false;
-    ledcSetup(BL_CHANNEL, BL_FREQ, BL_BITS);
-    ledcWrite(BL_CHANNEL, blDuty(blLevel));
+    applyBacklightFreq();
     return;
   }
   blTesting = true;
   lastActivity = millis();
-  ledcSetup(BL_CHANNEL, freq, BL_BITS);
-  ledcWrite(BL_CHANNEL, uint32_t(dutyPct / 100.0f * BL_MAX));
+  blSetFreq(freq);
+  ledcWrite(BL_CHANNEL, uint32_t(constrain(dutyPct, 0.0f, 100.0f) / 100.0f * blMax + 0.5f));
+}
+void applyBacklightFreq() {
+  blSetFreq(prefs::backlightFreq());
+  if (!blTesting) ledcWrite(BL_CHANNEL, blDuty(blLevel));
 }
 Perf takePerf() {
   Perf p{perfFrames, perfFrames ? perfSumMs / perfFrames : 0, perfMaxMs, millis() - perfStart,
