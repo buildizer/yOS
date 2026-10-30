@@ -255,8 +255,8 @@ static void handleScreenshot() {
   server.send(200, "image/bmp", "");
   client.write(header, sizeof(header));
   uint16_t *fb = hal::framebuffer();
-  // No cache invalidation here: the framebuffer is written through the cache by the copy task, and
-  // invalidating could discard lines it hasn't written back yet, corrupting the live screen.
+  // The newest finished frame. No cache invalidation here: the copy task writes through the cache (and
+  // drops stale lines itself after a DMA copy); invalidating could discard pixels not yet in PSRAM.
   static uint8_t row[480 * 3];
   for (int y = H - 1; y >= 0; y--) {  // BMP rows go bottom-up
     for (int x = 0; x < W; x++) {
