@@ -2,7 +2,8 @@
 # Build and flash yOS.
 #   tools/flash.sh          asks which way (shows which ones are available right now)
 #   tools/flash.sh usb      over the USB cable; yOS installs it and shows the update screen
-#   tools/flash.sh ota      over Wi-Fi (the board and this Mac must be on the same network)
+#   tools/flash.sh ota      over Wi-Fi (the board and this Mac must be on the same network): pushes
+#                           firmware.bin.gz to the board's web server (tools/push_update.py)
 #   tools/flash.sh recovery over USB through the chip's ROM loader: no screen, but works even
 #                           when the installed firmware is broken
 #   tools/flash.sh auto     Wi-Fi when the board answers, else USB, without asking
@@ -56,18 +57,31 @@ case $MODE in
   ota)
     PASS=$(ota_password) || { echo "No Update Password given." >&2; exit 1; }
     reachable || { echo "The board doesn't answer at $HOST. Is this Mac on the same Wi-Fi, and is Wi-Fi on in the board's Settings?" >&2; exit 1; }
-    pio run -e yos  # one build for every route; espota sends that same file
+    pio run -e yos  # one build for every route
     PY=$(ls ~/.platformio/penv/bin/python /opt/homebrew/opt/platformio/libexec/bin/python 2>/dev/null | head -1)
-    "$PY" ~/.platformio/packages/framework-arduinoespressif32/tools/espota.py -i "$HOST" -p 3232 \
-      -a "$PASS" -f .pio/build/yos/firmware.bin || {
-      echo "If the password was refused, run: security delete-generic-password -s $KEYCHAIN_SERVICE" >&2; exit 1; } ;;
+    # Pushed to the board's web server as firmware.bin.gz, written while it arrives. Boards from before
+    # pushed updates answer 404 (exit 3): those get espota, which waits for an answer after every 1.4 KB.
+    set +e
+    YOS_OTA_PASS=$PASS "$PY" tools/push_update.py "$HOST" .pio/build/yos/firmware.bin.gz
+    RC=$?
+    set -e
+    if [[ $RC == 3 ]]; then
+      echo "Falling back to espota."
+      "$PY" ~/.platformio/packages/framework-arduinoespressif32/tools/espota.py -i "$HOST" -p 3232 \
+        -a "$PASS" -f .pio/build/yos/firmware.bin || RC=2
+      [[ $RC == 2 ]] || RC=0
+    fi
+    if [[ $RC == 2 ]]; then
+      echo "If the password was refused, run: security delete-generic-password -s $KEYCHAIN_SERVICE" >&2; exit 1
+    fi
+    [[ $RC == 0 ]] || exit 1 ;;
   usb)
     PORT=$(usb_port)
     [[ -n $PORT ]] || { echo "No USB serial port found. Check the cable." >&2; exit 1; }
     pio run -e yos
     echo "Sending to yOS on $PORT"
     PY=$(ls ~/.platformio/penv/bin/python /opt/homebrew/opt/platformio/libexec/bin/python 2>/dev/null | head -1)
-    "$PY" tools/usb_update.py .pio/build/yos/firmware.bin "$PORT" ;;
+    "$PY" tools/usb_update.py .pio/build/yos/firmware.bin.gz "$PORT" ;;
   recovery)
     PORT=$(usb_port)
     [[ -n $PORT ]] || { echo "No USB serial port found. Check the cable." >&2; exit 1; }

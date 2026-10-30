@@ -10,6 +10,9 @@
 #include "os/prefs.h"
 #include "os/wallpaper.h"
 #include "script/loader.h"
+#include "os/ota_screen.h"
+#include "services/firmware_update.h"
+#include "services/github_update.h"
 
 static WebServer server(80);
 static Snapshot snap;
@@ -581,6 +584,63 @@ static void handleWallpaperRemove() {
   server.send(200, "text/plain", "ok");
 }
 
+// ---------- firmware push (tools/push_update.py) ----------
+
+// POST /api/update: the request body is the image (firmware.bin.gz as built, or firmware.bin), sent as
+// application/octet-stream with HTTP Basic auth "yos" + the Update Password. It is written while it
+// arrives, so a push takes about as long as the transfer plus the last flash writes.
+static String pushError;
+static bool pushSeen = false, pushStarted = false, pushUnauthorized = false;  // per request
+static uint32_t pushT0 = 0;
+
+static void handleFirmwareChunk() {
+  HTTPRaw &raw = server.raw();
+  if (raw.status == RAW_START) {
+    pushError = "";
+    pushSeen = true;
+    pushStarted = pushUnauthorized = false;
+    pushT0 = millis();
+    String pw = prefs::otaPassword();
+    if (pw.isEmpty() || !server.authenticate("yos", pw.c_str())) { pushUnauthorized = true; return; }
+    if (ghupdate::installing()) { pushError = "A GitHub update is being installed."; return; }
+    if (!fwupdate::begin("Wi-Fi push", 0, pushError)) return;
+    pushStarted = true;
+    otaScreenBegin("Installing over Wi-Fi");
+  } else if (raw.status == RAW_WRITE) {
+    if (!pushStarted || !pushError.isEmpty()) return;  // refused: the rest of the body is read and dropped
+    if (!fwupdate::write(raw.buf, raw.currentSize)) pushError = fwupdate::error();
+    else otaScreenProgress(raw.totalSize, server.clientContentLength());
+  } else if (raw.status == RAW_ABORTED && pushStarted) {
+    fwupdate::abort();
+    otaScreenFail();
+    pushStarted = false;
+  }
+}
+
+static void handleFirmwarePush() {
+  bool seen = pushSeen;
+  pushSeen = false;  // the next request starts clean, even if it carries no body
+  if (!seen) return server.send(400, "text/plain", "No firmware in the request.\n");
+  if (pushUnauthorized) return server.requestAuthentication(BASIC_AUTH, "yOS", "Wrong Update Password\n");
+  if (pushStarted && pushError.isEmpty()) {
+    Serial.printf("[web] STATS push received %d B in %lu ms\n", server.clientContentLength(),
+                  (unsigned long)(millis() - pushT0));
+    if (fwupdate::finish()) {
+      server.send(200, "text/plain", "Installed yOS " + fwupdate::imageVersion() + ". Restarting.\n");
+      otaScreenRestarting();
+      delay(500);
+      ESP.restart();
+    }
+  }
+  if (pushStarted) {
+    if (pushError.isEmpty()) pushError = fwupdate::error();
+    fwupdate::abort();
+    otaScreenFail();
+    pushStarted = false;
+  }
+  server.send(409, "text/plain", pushError + "\n");
+}
+
 void webStart() {
 #ifdef YOS_DEV_TOOLS
   server.on("/screenshot.bmp", handleScreenshot);
@@ -653,6 +713,7 @@ void webStart() {
   server.on("/api/wallpapers/remove", HTTP_POST, handleWallpaperRemove);
   server.on("/", [] { server.send_P(200, "text/html", PAGE); });
   server.on("/api/status", handleStatus);
+  server.on("/api/update", HTTP_POST, handleFirmwarePush, handleFirmwareChunk);
   server.begin();
 }
 

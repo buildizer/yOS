@@ -4,7 +4,8 @@
 // Software updates from GitHub Releases of a private repo.
 // The board signs in once with GitHub's device flow (a code shown on screen, approved on a phone) and keeps
 // the resulting read-only token in NVS. It checks the latest release, compares its tag with
-// YOS_FIRMWARE_VERSION and streams firmware.bin over HTTPS into the spare OTA slot.
+// YOS_FIRMWARE_VERSION and streams firmware.bin.gz (or firmware.bin, on older releases) over HTTPS into
+// the spare OTA slot, inflating it on the way (firmware_update.cpp).
 // Network work runs on a short-lived task; everything here is safe to call from the UI.
 namespace ghupdate {
 
@@ -29,7 +30,7 @@ struct Status {
   uint32_t codeExpiresMs = 0;  // millis() when the code stops working
   String latest;         // AVAILABLE / UP_TO_DATE: newest release version, without the "v"
   String notes;          // first lines of its release notes
-  uint32_t size = 0;     // firmware.bin bytes
+  uint32_t size = 0;     // download size (firmware.bin.gz, or firmware.bin)
   time_t lastCheck = 0;  // wall-clock time of the last successful check
   String error;
 };
