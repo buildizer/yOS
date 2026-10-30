@@ -2,6 +2,8 @@
 
 Firmware for the Guition ESP32-4848S040 (ESP32-S3, 4" 480x480 touch display): an iOS-style home
 screen, built-in apps, Lua script apps and an App Store. Build with PlatformIO (`pio run -e yos`).
+It runs on Arduino core 3 / ESP-IDF 5 (pioarduino). The first build also rebuilds ESP-IDF's libraries
+with the options in `custom_sdkconfig` (platformio.ini), which takes a while; later builds reuse them.
 
 ## Phone remote (Bluetooth LE)
 
