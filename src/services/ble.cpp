@@ -290,7 +290,7 @@ bool stackStart() {
   // Reading this makes a phone (iOS especially) pair; it also proves the link is authenticated.
   svc->createCharacteristic(SEC_UUID, SECURE_READ)->setValue(std::string("paired"));
   remote::addTo(svc);
-  svc->start();
+  server->start();  // registers the services (NimBLE 2 no longer starts them one by one)
   NimBLEDevice::setMTU(PREFERRED_MTU);
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
   adv->addServiceUUID(SVC_UUID);
