@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 580" font-family="-apple-system, SF Pro Display, Helvetica, Arial, sans-serif">
+  <rect width="1220" height="580" rx="20" fill="#1C1C1E"/>
+  <text x="610" y="40" text-anchor="middle" fill="#F2F2F7" font-size="24" font-weight="700" letter-spacing="2">yOS · MONOGRAM CONCEPTS</text>
+  <text x="610" y="64" text-anchor="middle" fill="#8E8E93" font-size="14">iOS blue #007AFF · one glyph · boot screen · launcher tile · README</text>
+
+  <!-- divider guides -->
+  <line x1="420" y1="90" x2="420" y2="540" stroke="#2C2C2E"/>
+  <line x1="800" y1="90" x2="800" y2="540" stroke="#2C2C2E"/>
+
+  <!-- ============ COLUMN A : Classic ============ -->
+  <g transform="translate(40,0)">
+    <text x="180" y="112" text-anchor="middle" fill="#F2F2F7" font-size="17" font-weight="600">A · Classic</text>
+    <text x="180" y="132" text-anchor="middle" fill="#8E8E93" font-size="12">straight, confident</text>
+    <!-- big tile -->
+    <rect x="80" y="150" width="200" height="200" rx="46" fill="#007AFF"/>
+    <g transform="translate(105,170) scale(1.25)" stroke="#fff" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M30 30 L60 74"/><path d="M90 30 L39 105"/>
+    </g>
+    <!-- boot lockup -->
+    <rect x="96" y="380" width="168" height="120" rx="22" fill="#0B1220"/>
+    <g transform="translate(150,398) scale(0.62)" stroke="#fff" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M30 30 L60 74"/><path d="M90 30 L39 105"/>
+    </g>
+    <text x="180" y="482" text-anchor="middle" fill="#F2F2F7" font-size="20" font-weight="600" letter-spacing="1">yOS</text>
+    <!-- 56px tile -->
+    <rect x="300" y="300" width="56" height="56" rx="14" fill="#007AFF"/>
+    <g transform="translate(307,302) scale(0.355)" stroke="#fff" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M30 30 L60 74"/><path d="M90 30 L39 105"/>
+    </g>
+  </g>
+
+  <!-- ============ COLUMN B : Friendly ============ -->
+  <g transform="translate(420,0)">
+    <text x="180" y="112" text-anchor="middle" fill="#F2F2F7" font-size="17" font-weight="600">B · Friendly</text>
+    <text x="180" y="132" text-anchor="middle" fill="#8E8E93" font-size="12">curved tail, warmer</text>
+    <rect x="80" y="150" width="200" height="200" rx="52" fill="#007AFF"/>
+    <g transform="translate(105,170) scale(1.25)" stroke="#fff" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M30 30 L60 74"/><path d="M90 30 L62 72 Q50 104 24 100"/>
+    </g>
+    <rect x="96" y="380" width="168" height="120" rx="22" fill="#0B1220"/>
+    <g transform="translate(150,398) scale(0.62)" stroke="#fff" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M30 30 L60 74"/><path d="M90 30 L62 72 Q50 104 24 100"/>
+    </g>
+    <text x="180" y="482" text-anchor="middle" fill="#F2F2F7" font-size="20" font-weight="600" letter-spacing="1">yOS</text>
+    <rect x="300" y="300" width="56" height="56" rx="16" fill="#007AFF"/>
+    <g transform="translate(307,302) scale(0.355)" stroke="#fff" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M30 30 L60 74"/><path d="M90 30 L62 72 Q50 104 24 100"/>
+    </g>
+  </g>
+
+  <!-- ============ COLUMN C : Cut-out ============ -->
+  <g transform="translate(800,0)">
+    <text x="180" y="112" text-anchor="middle" fill="#F2F2F7" font-size="17" font-weight="600">C · Cut-out</text>
+    <text x="180" y="132" text-anchor="middle" fill="#8E8E93" font-size="12">glyph knocked out, iconic</text>
+    <mask id="mcBig">
+      <rect x="80" y="150" width="200" height="200" rx="46" fill="#fff"/>
+      <g transform="translate(105,170) scale(1.25)" stroke="#000" stroke-width="14" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M30 30 L60 74"/><path d="M90 30 L39 105"/>
+      </g>
+    </mask>
+    <rect x="80" y="150" width="200" height="200" rx="46" fill="#007AFF" mask="url(#mcBig)"/>
+    <!-- boot: positive blue glyph on dark -->
+    <rect x="96" y="380" width="168" height="120" rx="22" fill="#0B1220"/>
+    <g transform="translate(150,398) scale(0.62)" stroke="#0A84FF" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M30 30 L60 74"/><path d="M90 30 L39 105"/>
+    </g>
+    <text x="180" y="482" text-anchor="middle" fill="#F2F2F7" font-size="20" font-weight="600" letter-spacing="1">yOS</text>
+    <mask id="mcSmall">
+      <rect x="300" y="300" width="56" height="56" rx="14" fill="#fff"/>
+      <g transform="translate(307,302) scale(0.355)" stroke="#000" stroke-width="15" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M30 30 L60 74"/><path d="M90 30 L39 105"/>
+      </g>
+    </mask>
+    <rect x="300" y="300" width="56" height="56" rx="14" fill="#007AFF" mask="url(#mcSmall)"/>
+  </g>
+
+  <text x="610" y="560" text-anchor="middle" fill="#636366" font-size="12">Each shown as launcher tile (200px) · boot lockup · 56px tile</text>
+</svg>
