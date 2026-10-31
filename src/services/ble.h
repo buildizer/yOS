@@ -85,4 +85,24 @@ struct Transfer {
   uint32_t done, total;
 };
 Transfer transfer();
+
+// Keyboard, media keys and mouse for the phone bonded to our server (services/ble_hid.cpp, the
+// iPhone Remote app). The calls only queue; a worker sends each press, then its release.
+enum HidState : uint8_t {
+  HID_OFF,       // Bluetooth is off
+  HID_IDLE,      // no phone connected
+  HID_SECURING,  // connected, not yet encrypted and listening for key reports
+  HID_READY
+};
+HidState hidState();
+enum HidMod : uint8_t { MOD_CTRL = 0x01, MOD_SHIFT = 0x02, MOD_ALT = 0x04, MOD_GUI = 0x08 };  // GUI: Cmd
+// Consumer control usages (HID usage page 0x0C)
+const uint16_t MEDIA_PLAY_PAUSE = 0xCD, MEDIA_NEXT = 0xB5, MEDIA_PREVIOUS = 0xB6;
+const uint16_t MEDIA_VOLUME_UP = 0xE9, MEDIA_VOLUME_DOWN = 0xEA, MEDIA_MUTE = 0xE2;
+// Each returns false (and sends nothing) unless hidState() is HID_READY and the queue has room.
+bool hidKey(uint8_t mods, uint8_t key);  // key: keyboard usage (page 0x07), e.g. 0x28 Return
+bool hidMedia(uint16_t usage);
+bool hidType(const char *text);          // US layout; printable ASCII, \n and \t (other bytes skipped)
+void hidMove(int dx, int dy);            // relative pointer motion, merged until sent
+bool hidClick();
 }

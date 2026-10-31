@@ -6,3 +6,4 @@ App *createWeatherApp();
 App *createFilesApp();
 App *createSettingsApp();
 App *createStoreApp();
+App *createRemoteApp();

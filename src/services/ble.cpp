@@ -1,4 +1,5 @@
 #include "services/ble.h"
+#include "services/ble_hid.h"
 #include "services/ble_remote.h"
 #include <Arduino.h>
 #include <NimBLEDevice.h>
@@ -138,6 +139,7 @@ class ServerCb : public NimBLEServerCallbacks {
       touch();
     }
     remote::peerGone();
+    hid::peerGone();
     if (disc) NimBLEDevice::getAdvertising()->start();
   }
   // We are DisplayOnly: the stack asks for the key the phone's user must type.
@@ -152,6 +154,7 @@ class ServerCb : public NimBLEServerCallbacks {
   // Also called when a bonded phone just re-encrypts: only a pairing we showed a code for reports.
   void onAuthenticationComplete(ble_gap_conn_desc *desc) override {
     bool ok = desc->sec_state.encrypted && desc->sec_state.authenticated;
+    hid::peerSecured(desc->conn_handle, desc->sec_state.encrypted);
     Msg m = {};
     {
       Lock l;
@@ -290,9 +293,14 @@ bool stackStart() {
   svc->createCharacteristic(SEC_UUID, SECURE_READ)->setValue(std::string("paired"));
   remote::addTo(svc);
   svc->start();
+  hid::addTo(server);   // keyboard / media keys / mouse for the phone (iPhone Remote app)
   NimBLEDevice::setMTU(PREFERRED_MTU);
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+  // Flags + yOS UUID + HID UUID + appearance = 29 of 31 bytes; the name goes in the scan response.
+  // The HID UUID and keyboard appearance list us under iPhone Settings › Bluetooth.
   adv->addServiceUUID(SVC_UUID);
+  adv->addServiceUUID(NimBLEUUID((uint16_t)0x1812));
+  adv->setAppearance(0x03C1);  // HID keyboard
   adv->setScanResponse(true);
   stackUp = true;
   c.freeAfter = freeHeap();
@@ -327,6 +335,7 @@ void stackStop() {
     peerConn = BLE_HS_CONN_HANDLE_NONE;
   }
   remote::detach();
+  hid::detach();
   NimBLEDevice::getScan()->stop();
   applyAdvertising(false);
   dropClient();
@@ -685,6 +694,7 @@ void bleBegin() {
   mtx = xSemaphoreCreateMutex();
   queue = xQueueCreate(8, sizeof(Msg));
   remote::init();
+  hid::init();
   nvs.begin("yosble", false);
   loadBond();
   bool en = nvs.getBool("en", false);
