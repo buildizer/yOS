@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" font-family="'Helvetica Neue', 'Arial', sans-serif">
+  <rect width="1200" height="640" rx="20" fill="#1C1C1E"/>
+  <text x="600" y="44" text-anchor="middle" fill="#F2F2F7" font-size="24" font-weight="700" letter-spacing="2">yOS · WORDMARK (one word)</text>
+  <text x="600" y="68" text-anchor="middle" fill="#8E8E93" font-size="14">iOS blue #007AFF · tight tracking · lowercase y, uppercase OS</text>
+
+  <line x1="400" y1="96" x2="400" y2="470" stroke="#2C2C2E"/>
+  <line x1="800" y1="96" x2="800" y2="470" stroke="#2C2C2E"/>
+
+  <!-- COL 1: boot / dark -->
+  <g>
+    <text x="200" y="124" text-anchor="middle" fill="#8E8E93" font-size="13" font-weight="600" letter-spacing="1">BOOT / DARK</text>
+    <rect x="60" y="150" width="280" height="200" rx="26" fill="#0B1220"/>
+    <text x="200" y="258" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="104" font-weight="800" letter-spacing="-4">yOS</text>
+    <text x="200" y="330" text-anchor="middle" fill="#5A6B86" font-size="15" letter-spacing="4">SMART PANEL</text>
+    <!-- accent-O variant -->
+    <text x="200" y="410" text-anchor="middle" fill="#8E8E93" font-size="12">variant: blue O</text>
+    <text x="200" y="452" text-anchor="middle" dominant-baseline="middle" font-size="60" font-weight="800" letter-spacing="-2"><tspan fill="#FFFFFF">y</tspan><tspan fill="#0A84FF">O</tspan><tspan fill="#FFFFFF">S</tspan></text>
+  </g>
+
+  <!-- COL 2: launcher tiles -->
+  <g>
+    <text x="600" y="124" text-anchor="middle" fill="#8E8E93" font-size="13" font-weight="600" letter-spacing="1">LAUNCHER TILE</text>
+    <rect x="500" y="150" width="200" height="200" rx="46" fill="#007AFF"/>
+    <text x="600" y="256" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="78" font-weight="800" letter-spacing="-3">yOS</text>
+    <!-- 56px -->
+    <rect x="520" y="380" width="56" height="56" rx="14" fill="#007AFF"/>
+    <text x="548" y="410" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="23" font-weight="800" letter-spacing="-1">yOS</text>
+    <text x="548" y="452" text-anchor="middle" fill="#8E8E93" font-size="12">56 px</text>
+    <!-- rounded friendlier -->
+    <rect x="624" y="380" width="56" height="56" rx="18" fill="#0A84FF"/>
+    <text x="652" y="410" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="23" font-weight="800" letter-spacing="-1">yOS</text>
+    <text x="652" y="452" text-anchor="middle" fill="#8E8E93" font-size="12">rounder</text>
+  </g>
+
+  <!-- COL 3: README / light -->
+  <g>
+    <text x="1000" y="124" text-anchor="middle" fill="#8E8E93" font-size="13" font-weight="600" letter-spacing="1">README / LIGHT</text>
+    <rect x="860" y="150" width="280" height="200" rx="26" fill="#F2F2F7"/>
+    <text x="1000" y="258" text-anchor="middle" dominant-baseline="middle" fill="#0066D6" font-size="104" font-weight="800" letter-spacing="-4">yOS</text>
+    <!-- horizontal lockup -->
+    <rect x="904" y="392" width="48" height="48" rx="12" fill="#007AFF"/>
+    <text x="928" y="417" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="20" font-weight="800" letter-spacing="-1">yOS</text>
+    <text x="968" y="417" text-anchor="start" dominant-baseline="middle" fill="#F2F2F7" font-size="30" font-weight="700" letter-spacing="0">yOS</text>
+    <text x="1000" y="452" text-anchor="middle" fill="#8E8E93" font-size="12">tile + wordmark lockup</text>
+  </g>
+
+  <text x="600" y="520" text-anchor="middle" fill="#636366" font-size="13">Pick: weight (shown 800/heavy), the blue-O accent (yes/no), tile corner roundness, and light wordmark blue.</text>
+  <text x="600" y="548" text-anchor="middle" fill="#636366" font-size="13">Fonts here are system Helvetica/Arial for preview — in Canva I'll set a proper geometric typeface (e.g. SF-like / Montserrat).</text>
+</svg>
