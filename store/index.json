@@ -48,6 +48,22 @@
         "main.lua"
       ],
       "requires": "1.2"
+    },
+    {
+      "id": "portscan",
+      "name": "Port Scanner",
+      "icon": "router",
+      "color": "#FF9F0A",
+      "version": "1.0",
+      "summary": "TCP connect port scanner",
+      "description": "Check which TCP ports are open on a host you own. Scan your own gateway with one tap, pick a built-in list of common ports or a custom range, and watch open ports appear with their service names. Connect-scan only; scan only devices and networks you own.",
+      "notes": "First release.",
+      "size": 6416,
+      "files": [
+        "app.json",
+        "main.lua"
+      ],
+      "requires": "1.2"
     }
   ]
 }
