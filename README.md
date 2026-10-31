@@ -52,3 +52,33 @@ complete, then `{"cmd":"put_done","ok":true,"size":n}` arrives. Paths are absolu
 root, at most 120 characters, without `..`. One transfer runs at a time; one that makes no
 progress for 15 s, or whose phone disconnects, is dropped. The display shows a small progress
 pill while a file moves.
+
+## iPhone Remote (Bluetooth keyboard, media keys, mouse)
+
+The iPhone Remote app makes the display a Bluetooth LE HID device for a paired iPhone (or iPad,
+Mac, Android phone): a keyboard, media keys and a mouse, with no extra hardware. Its HID, Battery
+and Device Information services share the GATT server, passkey pairing and bonds with the phone
+remote above.
+
+**Pair.** On the display, turn on Settings › Bluetooth and *Discoverable as yOS* (the app has the
+same switches while nothing is connected). On the iPhone open Settings › Bluetooth, tap **yOS**
+under Other Devices and type the 6-digit code the display shows. A paired iPhone reconnects on
+its own whenever yOS is discoverable. A phone that paired before this firmware cached the old
+service list: forget yOS on the phone (and under Settings › Bluetooth › Paired Phones on the
+display) and pair again.
+
+**Use it.** The app sends previous / play-pause / next and volume down / mute / up, a *Camera
+Shutter* button (volume up, which takes a photo in the Camera app), *Type Text…* (US layout,
+printable ASCII; other characters are skipped) and eight shortcut buttons. Touch and hold a
+shortcut to rename it, pick its key and modifiers, or restore its default; the shortcuts are
+kept in the `yosremote` NVS namespace. Defaults: Home (⌘H), Search (⌘Space), Switch App (⌘Tab),
+Escape, ←, →, Tab, Return. Other iPhone shortcuts that work with a hardware keyboard: in-app ones
+such as ⌘C / ⌘V / ⌘Z / ⌘A, ⌘N and ⌘F where the app supports them, and arrows / Tab inside text
+fields. With Settings › Accessibility › Keyboards › Full Keyboard Access turned on, Tab and the
+arrows move the focus anywhere, Space activates, and Escape goes back. While a Bluetooth keyboard
+is connected, iOS hides its on-screen keyboard (tap the keyboard icon at the bottom right of the
+screen to show it).
+
+**Pointer.** The touchpad sends relative mouse motion; a tap is a click. iOS shows the pointer
+only with Settings › Accessibility › Touch › AssistiveTouch turned on (Pointer Devices there sets
+the tracking speed and what the buttons do).
