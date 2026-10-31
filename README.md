@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="design/branding/yos-wordmark-light.svg" alt="yOS" width="200">
+</p>
+
 # yOS
 
 Firmware for the Guition ESP32-4848S040 (ESP32-S3, 4" 480x480 touch display): an iOS-style home
