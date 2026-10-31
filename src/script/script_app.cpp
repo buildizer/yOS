@@ -12,6 +12,8 @@
 //   ui.button(page, text, fn) -> h      ui.label(page, text) -> label (label:set_text(text))
 //   ui.alert(title, message?, {"Cancel","OK"}?, fn(index)?)      ui.input(title, placeholder?, fn(text))
 //   net.get(url, fn(status, body | nil, err))   json.decode(text) -> value | nil, err
+//   net.tcp_open(host, port, [timeout_ms,] fn(result))   result: "open"|"closed"|"timeout"|"error"
+//   net.local_ip() / net.gateway() / net.netmask() (alias net.subnet()) -> string
 //   store.get(key) / store.set(key, value)      sys.time(), sys.millis()     global tick() at ~4 Hz
 #include "script/script_app.h"
 #include <atomic>
@@ -21,6 +23,9 @@
 #include <ArduinoJson.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <lwip/sockets.h>
+#include <lwip/netdb.h>
+#include <errno.h>
 #include "os/ui.h"
 #include "script/sandbox.h"
 
@@ -31,6 +36,11 @@ static const size_t BODY_MAX = 64 * 1024;     // largest net.get body
 static const size_t STORE_MAX = 16 * 1024;    // store.json
 static const uint16_t NET_TIMEOUT_MS = 4000;
 static const uint32_t NET_STACK = 6144;       // bytes of internal RAM for one request's worker task
+static const uint32_t TCP_TIMEOUT_MS = 1500;  // default net.tcp_open connect timeout
+static const uint32_t TCP_TIMEOUT_MIN = 100;  // clamp for the caller-supplied timeout
+static const uint32_t TCP_TIMEOUT_MAX = 10000;
+static const uint32_t TCP_STACK = 4096;       // worker task stack (socket + DNS resolve)
+static const size_t HOST_MAX = 253;           // longest host a scan may target (a full DNS name)
 static const int MAX_OBJECTS = 300;           // pages, groups, rows, buttons and labels per app session
 static const size_t TEXT_MAX = 2048;          // longest label/row/button/alert text a script may set
 static const size_t PRINT_MAX = 200;          // print() output is cut to this many bytes
@@ -46,7 +56,16 @@ struct NetJob {
   std::string body, error;
   String url;
 };
-static std::atomic<int> netWorkers{0};  // running worker tasks, at most 1 in total
+// One net.tcp_open connect. The worker attempts a single TCP connect and sets result, then done
+// last; the UI task reads it after seeing done (from tick). The worker never touches Lua or LVGL.
+struct TcpJob {
+  std::atomic<bool> done{false};
+  String host;
+  uint16_t port = 0;
+  uint32_t timeoutMs = TCP_TIMEOUT_MS;
+  const char *result = "error";  // "open" | "closed" | "timeout" | "error" (a static string)
+};
+static std::atomic<int> netWorkers{0};  // running worker tasks (net.get + net.tcp_open), at most 1 in total
 struct LuaFn;
 
 // One open app: its Lua state and the UI it owns. Budget comes first so the sandbox's hook and
@@ -65,6 +84,8 @@ struct Session : Budget, std::enable_shared_from_this<Session> {
   uint32_t storeFlushed = 0;     // millis() of the last write
   std::shared_ptr<NetJob> job;   // the pending net.get, if any
   std::shared_ptr<LuaFn> netCb;  // its callback
+  std::shared_ptr<TcpJob> tcp;   // the pending net.tcp_open, if any (shares net's single-flight)
+  std::shared_ptr<LuaFn> tcpCb;  // its callback
 };
 
 static Session *sessionOf(lua_State *L) { return static_cast<Session *>(budgetOf(L)); }
@@ -423,7 +444,7 @@ static int netGet(lua_State *L) {
   Session *s = sessionOf(L);
   String url = luaL_checkstring(L, 1);
   luaL_checktype(L, 2, LUA_TFUNCTION);
-  if (s->job) luaL_error(L, "a request is already running");
+  if (s->job || s->tcp) luaL_error(L, "a request is already running");
   auto job = std::make_shared<NetJob>();
   job->url = url;
   if (!url.startsWith("http://")) {
@@ -462,6 +483,149 @@ static void pollNet(Session *s) {
   s->netCb.reset();
   if (job->code > 0) invoke(cb, ARG_NET, job->code, job->body.data(), job->body.size());
   else invoke(cb, ARG_NET, 0, job->error.data(), job->error.size());
+}
+
+// ---------- net.tcp_open (TCP connect scan) ----------
+
+// A single TCP connect attempt: open a socket to host:port and see whether it accepts. This is a
+// plain connect — the same thing any client does — never a raw/SYN/stealth probe. Returns a static
+// string: "open" (accepted), "closed" (refused with RST), "timeout" (no answer in time) or "error"
+// (could not resolve or create the socket). Runs on the worker task, so the blocking resolve and the
+// select() never touch the LVGL thread.
+static const char *tcpConnectScan(const char *host, uint16_t port, uint32_t timeoutMs) {
+  struct addrinfo hints = {};
+  hints.ai_family = AF_INET;  // IPv4 only (matches the local_ip/gateway helpers)
+  hints.ai_socktype = SOCK_STREAM;
+  char portStr[6];
+  snprintf(portStr, sizeof(portStr), "%u", port);
+  struct addrinfo *res = nullptr;
+  if (getaddrinfo(host, portStr, &hints, &res) != 0 || !res) return "error";
+
+  const char *result = "error";
+  int fd = lwip_socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+  if (fd >= 0) {
+    int flags = lwip_fcntl(fd, F_GETFL, 0);  // connect without blocking, so select() enforces the timeout
+    lwip_fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    int r = lwip_connect(fd, res->ai_addr, res->ai_addrlen);
+    if (r == 0) {
+      result = "open";  // connected at once (same host, say)
+    } else if (errno == EINPROGRESS) {
+      fd_set wfds;
+      FD_ZERO(&wfds);
+      FD_SET(fd, &wfds);
+      struct timeval tv = {(time_t)(timeoutMs / 1000), (suseconds_t)((timeoutMs % 1000) * 1000)};
+      int sel = lwip_select(fd + 1, nullptr, &wfds, nullptr, &tv);
+      if (sel == 0) {
+        result = "timeout";
+      } else if (sel > 0) {
+        int soErr = 0;
+        socklen_t len = sizeof(soErr);
+        if (lwip_getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &len) != 0) result = "error";
+        else if (soErr == 0) result = "open";
+        else if (soErr == ECONNREFUSED) result = "closed";
+        else if (soErr == ETIMEDOUT) result = "timeout";
+        else result = "error";
+      }
+    } else if (errno == ECONNREFUSED) {
+      result = "closed";
+    }
+    lwip_close(fd);
+  }
+  freeaddrinfo(res);
+  return result;
+}
+
+static void tcpWorker(void *arg) {
+  auto *held = (std::shared_ptr<TcpJob> *)arg;
+  TcpJob &job = **held;
+  job.result = tcpConnectScan(job.host.c_str(), job.port, job.timeoutMs);
+  job.done = true;  // last: the UI task may now read and drop the job
+  delete held;
+  netWorkers--;
+  vTaskDelete(nullptr);
+}
+
+// A host string we are willing to resolve: an IPv4 address or a hostname (letters, digits, '.', '-').
+// Keeps obvious junk (spaces, URLs, control bytes) out of getaddrinfo.
+static bool plausibleHost(const char *h, size_t len) {
+  if (len < 1 || len > HOST_MAX) return false;
+  for (size_t i = 0; i < len; i++) {
+    char c = h[i];
+    if (!(isalnum((unsigned char)c) || c == '.' || c == '-')) return false;
+  }
+  return true;
+}
+
+// net.tcp_open(host, port, [timeout_ms,] function(result) ... end): one async TCP connect. The
+// callback runs later from tick() with "open"|"closed"|"timeout"|"error". One request at a time, and
+// it shares net.get's single-flight (a scan and a net.get can't run together).
+static int netTcpOpen(lua_State *L) {
+  Session *s = sessionOf(L);
+  size_t hlen;
+  const char *host = luaL_checklstring(L, 1, &hlen);
+  lua_Integer port = luaL_checkinteger(L, 2);
+  uint32_t timeout = TCP_TIMEOUT_MS;
+  int cbIdx = 3;
+  if (!lua_isfunction(L, 3)) {  // the optional timeout came before the callback
+    lua_Integer t = luaL_checkinteger(L, 3);
+    if (t < (lua_Integer)TCP_TIMEOUT_MIN) t = TCP_TIMEOUT_MIN;
+    if (t > (lua_Integer)TCP_TIMEOUT_MAX) t = TCP_TIMEOUT_MAX;
+    timeout = (uint32_t)t;
+    cbIdx = 4;
+  }
+  luaL_checktype(L, cbIdx, LUA_TFUNCTION);
+  if (port < 1 || port > 65535) luaL_error(L, "port must be 1..65535");
+  if (!plausibleHost(host, hlen)) luaL_error(L, "host must be an IPv4 address or hostname (1..%d chars)", (int)HOST_MAX);
+  if (s->job || s->tcp) luaL_error(L, "a request is already running");
+
+  auto job = std::make_shared<TcpJob>();
+  job->host = host;
+  job->port = (uint16_t)port;
+  job->timeoutMs = timeout;
+  if (WiFi.status() != WL_CONNECTED) {
+    job->result = "error";
+    job->done = true;  // delivered from the next tick, like net.get's early failures
+  } else {
+    if (netWorkers++ >= 1) {
+      netWorkers--;
+      luaL_error(L, "a request is already running");
+    }
+    auto *held = new std::shared_ptr<TcpJob>(job);
+    if (xTaskCreate(tcpWorker, "luascan", TCP_STACK, held, 1, nullptr) != pdPASS) {
+      delete held;
+      netWorkers--;
+      job->result = "error";
+      job->done = true;
+    }
+  }
+  s->tcpCb = keepFunction(L, cbIdx);
+  s->tcp = job;
+  return 0;
+}
+
+// From tick: hands a finished connect's result ("open"/"closed"/...) to its callback.
+static void pollTcp(Session *s) {
+  if (!s->tcp || !s->tcp->done) return;
+  std::shared_ptr<TcpJob> job = std::move(s->tcp);
+  s->tcp.reset();
+  LuaFnPtr cb = std::move(s->tcpCb);
+  s->tcpCb.reset();
+  invoke(cb, ARG_STRING, 0, job->result, strlen(job->result));
+}
+
+// net.local_ip() / net.gateway() / net.netmask(): the device's own IPv4 details from the Wi-Fi
+// stack, each "0.0.0.0" when not connected. They let an app offer to scan its own network/gateway.
+static int netLocalIp(lua_State *L) {
+  lua_pushstring(L, WiFi.localIP().toString().c_str());
+  return 1;
+}
+static int netGateway(lua_State *L) {
+  lua_pushstring(L, WiFi.gatewayIP().toString().c_str());
+  return 1;
+}
+static int netNetmask(lua_State *L) {
+  lua_pushstring(L, WiFi.subnetMask().toString().c_str());
+  return 1;
 }
 
 // ---------- store ----------
@@ -564,7 +728,9 @@ static int openApi(lua_State *L) {
 
   static const luaL_Reg uiLib[] = {{"page", uiPage},   {"group", uiGroup}, {"row", uiRow},     {"button", uiButton},
                                    {"label", uiLabel}, {"alert", uiAlert}, {"input", uiInput}, {nullptr, nullptr}};
-  static const luaL_Reg netLib[] = {{"get", netGet}, {nullptr, nullptr}};
+  static const luaL_Reg netLib[] = {{"get", netGet},           {"tcp_open", netTcpOpen}, {"local_ip", netLocalIp},
+                                    {"gateway", netGateway},   {"netmask", netNetmask},  {"subnet", netNetmask},
+                                    {nullptr, nullptr}};
   static const luaL_Reg storeLib[] = {{"get", storeGet}, {"set", storeSet}, {nullptr, nullptr}};
   static const luaL_Reg sysLib[] = {{"time", sysTime}, {"millis", sysMillis}, {nullptr, nullptr}};
   luaL_newlib(L, uiLib);
@@ -673,6 +839,8 @@ void ScriptApp::close() {
   s->alive = false;
   s->netCb.reset();  // breaks the Session <-> LuaFn cycle; a running request just finishes unobserved
   s->job.reset();
+  s->tcpCb.reset();  // same for a pending scan connect
+  s->tcp.reset();
   if (!removed) flushStore(s);
   if (s->L) {
     Serial.printf("[app %s] closed, peak %u KB of Lua memory\n", id(), (unsigned)(s->peak / 1024));
@@ -687,6 +855,7 @@ void ScriptApp::tick() {
   if (!session) return;
   Session *s = session.get();
   pollNet(s);
+  pollTcp(s);
   invoke(s, CallCtx{LUA_NOREF, ARG_NONE, nullptr, 0, 0, nullptr});
   if (s->storeDirty && (uint32_t)(millis() - s->storeFlushed) >= STORE_FLUSH_MS) flushStore(s);
 }

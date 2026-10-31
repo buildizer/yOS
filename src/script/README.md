@@ -78,6 +78,21 @@ and passing a closed page or group to `ui.*` raises an error.
   timeouts. Only one request can run at a time (in total, across apps): calling `net.get` while
   one is pending raises an error, so start the next one from the callback. The screen never waits
   for the network. (The old blocking form `status, body = net.get(url)` is gone.)
+- `net.tcp_open(host, port, function(result) ... end)` or
+  `net.tcp_open(host, port, timeout_ms, function(result) ... end)` attempts a single TCP connection
+  to `host:port` in the background and returns at once; the function runs later, from the tick, with
+  one of `"open"` (the port accepted the connection), `"closed"` (actively refused), `"timeout"` (no
+  answer within the timeout) or `"error"` (couldn't resolve the host or open a socket). `host` is an
+  IPv4 address or a hostname (letters, digits, `.` and `-`, up to 253 characters); `port` is
+  `1..65535`; `timeout_ms` defaults to 1500 and is clamped to `100..10000`. Like `net.get`, only one
+  request runs at a time across all apps — and a scan and a `net.get` share that single slot, so
+  calling either while one is pending raises an error. Chain the next connect from the callback to
+  scan a list of ports. This is an ordinary TCP connect, exactly what any client does to reach a
+  service; it is not and cannot be a raw/SYN/stealth probe. **Only scan devices and networks you own
+  or are explicitly allowed to test.**
+- `net.local_ip()`, `net.gateway()`, `net.netmask()` (alias `net.subnet()`) each return a string with
+  the device's own IPv4 details (`"0.0.0.0"` when Wi-Fi isn't connected), so an app can offer to scan
+  its own network or gateway.
 - `json.decode(text)` -> value, or `nil, message`. Objects and arrays become tables; `null` becomes nil.
 
 ### store
